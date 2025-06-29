@@ -54,3 +54,6 @@ build/
 service-account.json
 # GCP Service Account Key
 gcp-service-account-key.json
+
+# Other
+.github.env
