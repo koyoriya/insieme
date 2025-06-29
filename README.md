@@ -24,14 +24,13 @@ LLMによる問題作成&添削アプリ
 
 | 要素 | 技術 | 用途 |
 |------|------|------|
-| フロントエンド | Next.js + Tailwind CSS | Webアプリケーション |
-| フロントエンドホスティング | Firebase Hosting | 静的サイト配信 |
-| バックエンド | FastAPI | REST API |
-| バックエンドホスティング | Cloud Run | コンテナベースAPI |
+| フロントエンド | Next.js + Tailwind CSS | 静的Webアプリケーション |
+| ホスティング | Firebase Hosting | 静的サイト配信 |
+| バックエンド | Firebase Functions (Node.js) | サーバーレスAPI |
 | LLM | **Gemma**（GCP Vertex AI） | 問題生成・添削 |
-| データベース | Cloud SQL (PostgreSQL) | データ永続化 |
-| 認証 | Firebase Auth | ユーザー認証 |
-| インフラ | **Google Cloud Platform（GCP）** | クラウドプラットフォーム |
+| データベース | Cloud Firestore | NoSQLデータベース |
+| 認証 | Firebase Authentication | ユーザー認証 |
+| インフラ | **Firebase (Google Cloud)** | サーバーレスプラットフォーム |
 
 ## セットアップ
 
@@ -53,11 +52,10 @@ chmod +x scripts/setup-dev.sh
 ```bash
 make help                 # 利用可能なコマンドを表示
 make setup-dev           # 開発環境のセットアップ
-make setup-gcp           # GCPリソースの自動セットアップ
 make setup-firebase      # Firebaseの自動セットアップ
 make test               # 全テストの実行
 make dev-frontend       # フロントエンド開発サーバー起動
-make dev-backend        # バックエンド開発サーバー起動
+make dev-functions      # Firebase Functions開発サーバー起動
 make clean              # クリーンアップ
 ```
 
@@ -83,14 +81,8 @@ npm install -g firebase-tools
 # 前提条件チェック
 make validate-env
 
-# GCPリソースの自動作成（正しい課金アカウントIDを使用）
-make setup-gcp PROJECT_ID=your-project-id BILLING_ACCOUNT_ID=01A29F-753545-C10850
-
-# Firebaseホスティングの自動セットアップ
+# Firebaseプロジェクトの自動セットアップ
 make setup-firebase PROJECT_ID=your-project-id
-
-# JWT秘密鍵の生成
-make generate-secrets
 
 # Firebase CI token取得（GitHub Actions用）
 make get-firebase-token
@@ -102,12 +94,8 @@ make get-firebase-token
 
 | Secret名 | 取得方法 |
 |----------|----------|
-| `GCP_PROJECT_ID` | GCPプロジェクトID |
-| `GCP_SA_KEY` | `./scripts/setup-gcp.sh`実行後に生成される`gcp-service-account-key.json`の内容 |
-| `DATABASE_URL` | Cloud SQLの接続文字列（セットアップ完了後に表示） |
-| `SECRET_KEY` | `make generate-secrets`で生成 |
-| `API_URL` | `make get-api-url PROJECT_ID=your-project-id`でデプロイ後に取得 |
-| `FIREBASE_TOKEN` | `make get-firebase-token`で取得 |
+| `FIREBASE_PROJECT_ID` | FirebaseプロジェクトID |
+| `FIREBASE_TOKEN` | `firebase login:ci`で取得 |
 
 ### 🔄 デプロイの流れ
 
@@ -120,11 +108,14 @@ make get-firebase-token
 ### 🏃‍♂️ 開発サーバー起動
 
 ```bash
-# フロントエンド（ポート3000）
+# フロントエンド（ポート3001）
 make dev-frontend
 
-# バックエンド（ポート8000）
-make dev-backend
+# Firebase Functions エミュレータ
+make dev-functions
+
+# 全体のエミュレータ起動（推奨）
+firebase emulators:start
 ```
 
 ### 🧪 テスト実行
@@ -135,81 +126,77 @@ make test
 
 # 個別実行
 make test-frontend
-make test-backend
+make test-functions
 ```
 
-### 🗄️ データベース管理
+### 🗄️ Firebase管理
 
 ```bash
-# データベースのパスワード変更
-make change-db-password PROJECT_ID=your-project-id
+# Firebaseプロジェクト状況確認
+firebase projects:list
 
-# データベース状況確認
-make check-db-status PROJECT_ID=your-project-id
+# Firestore データ確認
+firebase firestore:indexes
 
-# データベース接続方法表示
-make connect-db PROJECT_ID=your-project-id
-
-# デプロイ後のAPI URL取得
-make get-api-url PROJECT_ID=your-project-id
+# Firebase Functions確認
+firebase functions:list
 
 # デプロイ状況確認
-make check-deployment-status PROJECT_ID=your-project-id
+firebase deploy --dry-run
 ```
 
 ## トラブルシューティング
 
-### GCPセットアップでのエラー
+### Firebaseセットアップでのエラー
 
-#### 権限エラー (PERMISSION_DENIED)
+#### Firebase CLI認証エラー
+
+```bash
+# Firebase再ログイン
+firebase login --reauth
+
+# 現在のユーザー確認
+firebase login:list
+```
+
+#### プロジェクト権限エラー
 
 ```bash
 # プロジェクトのオーナー権限があることを確認
-gcloud projects get-iam-policy PROJECT_ID
+firebase projects:list
 
-# 必要に応じて権限を追加
-gcloud projects add-iam-policy-binding PROJECT_ID \
-  --member="user:your-email@gmail.com" \
-  --role="roles/owner"
+# Firebase Hostingが有効になっていることを確認
+# https://console.firebase.google.com/project/your-project/hosting
 ```
 
-#### Vertex AI APIエラー
+#### 環境変数エラー
 
-- Vertex AIが利用できない地域の場合は自動的にスキップされます
-- 必要に応じて後でGCPコンソールから手動で有効化してください
+- `.env.local`ファイルが正しく設定されていることを確認
+- Firebase Console > Project Settings で正しい値を取得
 
-#### 課金アカウントエラー
+#### ビルドエラー
 
 ```bash
-# 利用可能な課金アカウントを確認
-make check-billing
+# 依存関係の再インストール
+cd frontend && npm ci
+cd ../functions && npm ci
 
-# 特定の課金アカウントをデバッグ
-make debug-billing BILLING_ACCOUNT_ID=your-billing-id PROJECT_ID=your-project-id
+# キャッシュクリア
+npm cache clean --force
 
-# 課金アカウントを手動で作成（必要な場合）
-# https://console.cloud.google.com/billing
+# ビルドテスト
+npm run build
 ```
 
-**よくある課金アカウントエラー:**
-
-- 課金アカウントIDの形式が間違っている（正しい形式: `XXXXXX-XXXXXX-XXXXXX`）
-- Billing Account User 権限がない
-- 課金アカウントが無効・停止状態
-
-#### サービスアカウントエラー
-
-**Service account does not exist エラー:**
-
-- サービスアカウント作成後にIAMロール割り当てまで少し時間がかかる場合があります
-- スクリプトを再実行してください（既存のリソースはスキップされます）
-
-**権限不足エラー:**
+#### デプロイエラー
 
 ```bash
-# 必要な権限を確認
-gcloud projects get-iam-policy PROJECT_ID
+# Firebase CLIバージョン確認
+firebase --version
 
-# プロジェクトのオーナー権限を確認
-gcloud projects get-iam-policy PROJECT_ID --flatten="bindings[].members" --filter="bindings.members:user:your-email@gmail.com"
+# プロジェクト設定確認
+firebase use
+
+# デプロイ前テスト
+firebase deploy --dry-run
 ```
