@@ -3,6 +3,7 @@
 import { useAuth } from "../../components/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import Image from "next/image";
 
 export default function Dashboard() {
   const { user, loading, signOut } = useAuth();
@@ -69,9 +70,11 @@ export default function Dashboard() {
                   {user.photoURL && (
                     <div className="mt-4">
                       <strong>Profile Picture:</strong>
-                      <img 
+                      <Image 
                         src={user.photoURL} 
                         alt="Profile" 
+                        width={64}
+                        height={64}
                         className="w-16 h-16 rounded-full mt-2"
                       />
                     </div>
