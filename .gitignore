@@ -57,3 +57,15 @@ gcp-service-account-key.json
 
 # Other
 .github.env
+
+# Firebase cache and temporary files
+.firebase/
+firebase-debug.log
+firebase-debug.*.log
+
+# Temporary Python diagnostic scripts
+check_firestore_problems.py
+firestore_diagnosis.py
+simple_firestore_test.py
+test_health_collection.py
+
