@@ -6,14 +6,12 @@
 
 GitHub リポジトリの Settings > Secrets and variables > Actions で以下を設定してください：
 
-#### 本番環境
+#### 本番環境（mainブランチ → `insieme`）
 - `FIREBASE_TOKEN`: Firebase CLI のトークン
-- `FIREBASE_PROJECT_ID`: Firebase プロジェクトID（本番）
 - `GEMINI_API_KEY`: Google Gemini AI API キー（本番）
 
-#### ステージング環境（オプション）
-- `FIREBASE_PROJECT_ID_STAGING`: Firebase プロジェクトID（ステージング）
-- `GEMINI_API_KEY_STAGING`: Google Gemini AI API キー（ステージング）
+#### 開発環境（developブランチ → `insieme-dev-d7459`）
+- `GEMINI_API_KEY_DEV`: Google Gemini AI API キー（開発）
 
 ### Firebase CLI トークンの取得
 
@@ -26,13 +24,14 @@ firebase login:ci
 
 ### プロジェクトIDの設定
 
-`.firebaserc` ファイルを更新：
+`.firebaserc` ファイルの設定：
 
 ```json
 {
   "projects": {
-    "default": "あなたのプロジェクトID",
-    "staging": "ステージング用プロジェクトID（オプション）"
+    "default": "insieme",
+    "dev": "insieme-dev-d7459",
+    "production": "insieme"
   }
 }
 ```
@@ -41,8 +40,8 @@ firebase login:ci
 
 ### 自動デプロイ
 
-- **main ブランチ**: 本番環境への自動デプロイ
-- **develop ブランチ**: ステージング環境への自動デプロイ（設定した場合）
+- **main ブランチ**: 本番環境（`insieme`）への自動デプロイ
+- **develop ブランチ**: 開発環境（`insieme-dev-d7459`）への自動デプロイ
 
 ### 手動デプロイ
 

@@ -1,12 +1,21 @@
 {
   "projects": {
-    "default": "YOUR_FIREBASE_PROJECT_ID"
+    "default": "insieme",
+    "dev": "insieme-dev-d7459",
+    "production": "insieme"
   },
   "targets": {
-    "YOUR_FIREBASE_PROJECT_ID": {
+    "insieme": {
       "hosting": {
         "frontend": [
-          "YOUR_FIREBASE_PROJECT_ID"
+          "insieme"
+        ]
+      }
+    },
+    "insieme-dev-d7459": {
+      "hosting": {
+        "frontend": [
+          "insieme-dev-d7459"
         ]
       }
     }
