@@ -1,8 +1,8 @@
-name: Deploy to Firebase
+name: Deploy to Firebase Staging
 
 on:
   push:
-    branches: [main]
+    branches: [develop]
   workflow_dispatch:
 
 permissions:
@@ -11,9 +11,9 @@ permissions:
   security-events: write
 
 jobs:
-  deploy:
+  deploy-staging:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/develop'
     
     steps:
       - name: Checkout code
@@ -46,15 +46,15 @@ jobs:
         working-directory: ./functions
         run: npm run build
         
-      # Deploy to Firebase
-      - name: Deploy to Firebase
+      # Deploy to Firebase Staging
+      - name: Deploy to Firebase Staging
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
-          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FIREBASE_PROJECT_ID_STAGING: ${{ secrets.FIREBASE_PROJECT_ID_STAGING }}
+          GEMINI_API_KEY_STAGING: ${{ secrets.GEMINI_API_KEY_STAGING }}
         run: |
-          # Set functions environment variables
-          firebase functions:config:set gemini.api_key="${GEMINI_API_KEY}" --project ${FIREBASE_PROJECT_ID} --token ${FIREBASE_TOKEN}
+          # Set functions environment variables for staging
+          firebase functions:config:set gemini.api_key="${GEMINI_API_KEY_STAGING}" --project ${FIREBASE_PROJECT_ID_STAGING} --token ${FIREBASE_TOKEN}
           
-          # Deploy hosting and functions
-          firebase deploy --project ${FIREBASE_PROJECT_ID} --token ${FIREBASE_TOKEN}
+          # Deploy hosting and functions to staging
+          firebase deploy --project ${FIREBASE_PROJECT_ID_STAGING} --token ${FIREBASE_TOKEN}
