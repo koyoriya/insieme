@@ -7,13 +7,26 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Problems - users can read/list their own problems, functions can write
+    // Worksheets - users can read/list their own worksheets, functions can write
+    match /worksheets/{worksheetId} {
+      allow read, list: if request.auth != null && 
+        (resource == null || resource.data.createdBy == request.auth.uid);
+      allow write: if true; // Functions can write
+    }
+    
+    // Keep old problems collection for backward compatibility during migration
     match /problems/{problemId} {
       allow read, list: if request.auth != null && resource.data.createdBy == request.auth.uid;
       allow write: if true; // Functions can write
     }
     
-    // Submissions - users can read/write their own submissions
+    // Worksheet submissions - users can read/write their own submissions
+    match /worksheet_submissions/{submissionId} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.userId == request.auth.uid);
+    }
+    
+    // Keep old submissions collection for backward compatibility
     match /submissions/{submissionId} {
       allow read, write: if request.auth != null && 
         (resource == null || resource.data.userId == request.auth.uid);

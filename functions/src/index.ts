@@ -121,7 +121,6 @@ export const generateProblems = onRequest({
     const {
       subject,
       difficulty,
-      questionType,
       topic,
       numQuestions,
       userId,
@@ -219,30 +218,34 @@ JSON形式で以下の構造で出力してください：
         return;
       }
 
-      // Add metadata to each problem
+      // Create worksheet with problems
       const problems = problemData.problems.map((problem: any, index: number) => ({
         ...problem,
-        id: `${Date.now()}_${index}`,
-        subject,
-        difficulty,
-        topic,
-        createdAt: new Date().toISOString(),
-        createdBy: userId,
+        id: `problem_${Date.now()}_${index}`,
       }));
 
-      // Save to Firestore
-      const batch = db.batch();
-      problems.forEach((problem: any) => {
-        const docRef = db.collection("problems").doc();
-        batch.set(docRef, problem);
-      });
-      await batch.commit();
+      const worksheet = {
+        title: `${topic} - ${difficulty === 'easy' ? '簡単' : difficulty === 'medium' ? '普通' : '難しい'}`,
+        description: `${topic}に関する${numQuestions}問の練習問題`,
+        subject,
+        topic,
+        difficulty,
+        createdAt: new Date().toISOString(),
+        createdBy: userId,
+        problems,
+        status: 'ready',
+      };
 
-    response.json({
-      success: true,
-      problems,
-      count: problems.length,
-    });
+      // Save worksheet to Firestore
+      const worksheetRef = db.collection("worksheets").doc();
+      await worksheetRef.set(worksheet);
+
+      // Return success response with worksheet data
+      response.json({
+        success: true,
+        worksheet: { id: worksheetRef.id, ...worksheet },
+        count: problems.length,
+      });
 
   } catch (error) {
     logger.error("Problem generation failed", {
