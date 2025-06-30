@@ -255,12 +255,9 @@ export default function Dashboard() {
                              problem.difficulty === 'medium' ? '普通' : '難しい'}
                           </span>
                           <span className={`inline-block ml-2 px-2 py-1 text-xs rounded ${
-                            problem.type === 'multiple-choice' ? 'bg-blue-100 text-blue-800' :
-                            problem.type === 'short-answer' ? 'bg-purple-100 text-purple-800' :
-                            'bg-orange-100 text-orange-800'
+                            problem.options ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
                           }`}>
-                            {problem.type === 'multiple-choice' ? '選択' :
-                             problem.type === 'short-answer' ? '記述' : '論述'}
+                            {problem.options ? '選択' : '記述'}
                           </span>
                         </div>
                         <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">

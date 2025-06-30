@@ -9,7 +9,6 @@ export interface Problem {
   options?: string[] | null;
   correctAnswer: string;
   explanation: string;
-  type: 'multiple-choice' | 'short-answer' | 'essay';
   subject: string;
   difficulty: string;
   topic: string;

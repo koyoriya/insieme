@@ -225,7 +225,6 @@ JSON形式で以下の構造で出力してください：
         id: `${Date.now()}_${index}`,
         subject,
         difficulty,
-        questionType,
         topic,
         createdAt: new Date().toISOString(),
         createdBy: userId,

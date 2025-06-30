@@ -13,7 +13,6 @@ interface Problem {
   options?: string[] | null;
   correctAnswer: string;
   explanation: string;
-  type: 'multiple-choice' | 'short-answer' | 'essay';
   subject: string;
   difficulty: string;
   topic: string;
@@ -92,7 +91,7 @@ function ProblemPageContent() {
   const handleSubmit = async () => {
     if (!user || !problem) return;
 
-    const answer = problem.type === 'multiple-choice' ? selectedOption : userAnswer;
+    const answer = problem.options ? selectedOption : userAnswer;
     if (!answer.trim()) {
       alert('回答を入力してください。');
       return;
@@ -105,7 +104,7 @@ function ProblemPageContent() {
         userId: user.uid,
         answer: answer.trim(),
         submittedAt: new Date().toISOString(),
-        isCorrect: problem.type === 'multiple-choice' ? 
+        isCorrect: problem.options ? 
           answer.trim() === problem.correctAnswer.trim() : undefined
       };
 
@@ -165,12 +164,9 @@ function ProblemPageContent() {
                    problem.difficulty === 'medium' ? '普通' : '難しい'}
                 </span>
                 <span className={`px-2 py-1 text-xs rounded ${
-                  problem.type === 'multiple-choice' ? 'bg-blue-100 text-blue-800' :
-                  problem.type === 'short-answer' ? 'bg-purple-100 text-purple-800' :
-                  'bg-orange-100 text-orange-800'
+                  problem.options ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
                 }`}>
-                  {problem.type === 'multiple-choice' ? '選択問題' :
-                   problem.type === 'short-answer' ? '記述問題' : '論述問題'}
+                  {problem.options ? '選択問題' : '記述問題'}
                 </span>
               </div>
             </div>
@@ -187,7 +183,7 @@ function ProblemPageContent() {
               </p>
             </div>
 
-            {problem.type === 'multiple-choice' && problem.options && (
+            {problem.options && (
               <div className="mb-6">
                 <h3 className="font-medium mb-3">選択肢:</h3>
                 <div className="space-y-2">
@@ -216,7 +212,7 @@ function ProblemPageContent() {
               </div>
             )}
 
-            {(problem.type === 'short-answer' || problem.type === 'essay') && (
+            {!problem.options && (
               <div className="mb-6">
                 <h3 className="font-medium mb-3">回答:</h3>
                 <textarea
@@ -224,10 +220,8 @@ function ProblemPageContent() {
                   onChange={(e) => setUserAnswer(e.target.value)}
                   disabled={hasSubmitted}
                   placeholder="こちらに回答を入力してください..."
-                  className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
-                    problem.type === 'essay' ? 'h-40' : 'h-24'
-                  } ${hasSubmitted ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                  rows={problem.type === 'essay' ? 8 : 4}
+                  className={`w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 h-24 ${hasSubmitted ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                  rows={4}
                 />
               </div>
             )}
