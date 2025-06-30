@@ -1,0 +1,20 @@
+# Compiled output
+lib/
+
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+
+# Runtime data
+*.log
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/

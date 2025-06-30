@@ -7,6 +7,18 @@ service cloud.firestore {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
+    // Problems - users can read/list their own problems, functions can write
+    match /problems/{problemId} {
+      allow read, list: if request.auth != null && resource.data.createdBy == request.auth.uid;
+      allow write: if true; // Functions can write
+    }
+    
+    // Submissions - users can read/write their own submissions
+    match /submissions/{submissionId} {
+      allow read, write: if request.auth != null && 
+        (resource == null || resource.data.userId == request.auth.uid);
+    }
+    
     // Health check document - allow read/write for functions
     match /health/{document} {
       allow read, write: if true;
