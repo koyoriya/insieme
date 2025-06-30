@@ -24,10 +24,11 @@ README.mdを参照してください．わからないところがあったら�
 ### 開発ワークフロー
 1. GitHub Issues にチケットを起票
 2. 適切なブランチを作成して実装
-3. ローカルでテストを実行し、Lint が通ることを確認
-4. リモートにプッシュし、プルリクエストを作成
-5. コードレビュー → 必要に応じて修正
-6. マージ後、自動デプロイが成功することを確認
+3. 変更を加えるたびにコミットを行う
+4. ローカルでテストを実行し、Lint が通ることを確認
+5. リモートにプッシュし、プルリクエストを作成
+6. コードレビュー → 必要に応じて修正
+7. マージ後、自動デプロイが成功することを確認
 
 ### テストと CI/CD
 - プロジェクトルートに `.github/workflows/ci.yml` を配置
@@ -49,6 +50,65 @@ README.mdを参照してください．わからないところがあったら�
 - Cloudflare CLI (wrangler)
 - VSCode（推奨）
 
+## 機能
+
+### 問題作成機能について
+
+問題はkatexを使って表示される．
+pdfダウンロードが可能であり，ユーザーはpdfを印刷することができる．
+
+#### ユーザー入力形式
+```
+{
+  difficulty: "初級" | "中級" | "上級"  // 難易度
+  description: string;  // 問題の詳細説明
+}
+```
+
+#### 問題データ構造
+```
+{
+  id: string;           // 問題の一意識別子
+  userId: string;       // 作成者ID
+  no: number;           // 問題番号
+  question: string;     // 問題文
+  modelAnswer: string;  // 模範回答
+  createdAt: Date;      // 作成日時
+  isPublic: false;      // 基本非公開
+  subject: string;      // 科目
+  difficulty: string;   // 難易度
+  topic: string;        // トピック
+}
+```
+
+#### 制約・制限
+- **問題の公開性**: 基本非公開（作成者のみ閲覧可能）
+- **LLM生成制限**: 1日あたり10回まで
+- **模範回答閲覧**: 回答提出後にのみ閲覧可能
+- **問題編集**: 一度作成した問題は編集不可
+- **PDF印刷**: 模範回答なしで印刷（回答提出前）
+
+#### LLM生成制限の実装
+```typescript
+// ユーザーごとの生成回数管理
+{
+  userId: string;
+  date: string;         // YYYY-MM-DD形式
+  generationCount: number;  // その日の生成回数
+  lastReset: Date;      // 最後にリセットされた日時
+}
+```
+
+#### 回答提出後の状態管理
+```typescript
+// 問題の回答状態
+{
+  problemId: string;
+  userId: string;
+  submittedAt: Date;    // 回答提出日時
+  canViewAnswer: boolean; // 模範回答閲覧可能フラグ
+}
+```
 
 ## その他
 
