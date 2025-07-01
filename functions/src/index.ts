@@ -124,9 +124,10 @@ export const generateProblems = onRequest({
       topic,
       numQuestions,
       userId,
+      tempWorksheetId,
     } = request.body;
 
-    logger.info("Parsed request body", {subject, difficulty, topic, numQuestions, userId});
+    logger.info("Parsed request body", {subject, difficulty, topic, numQuestions, userId, tempWorksheetId});
 
     if (!subject || !topic || !numQuestions || !userId) {
       response.status(400).json({error: "Missing required fields"});
@@ -237,13 +238,27 @@ JSON形式で以下の構造で出力してください：
     };
 
     // Save worksheet to Firestore
-    const worksheetRef = db.collection("worksheets").doc();
-    await worksheetRef.set(worksheet);
+    let worksheetId: string;
+    if (tempWorksheetId) {
+      // Update existing temporary worksheet
+      logger.info("Updating existing temporary worksheet", {tempWorksheetId});
+      await db.collection("worksheets").doc(tempWorksheetId).update({
+        ...worksheet,
+        status: "ready",
+      });
+      worksheetId = tempWorksheetId;
+    } else {
+      // Create new worksheet (fallback)
+      logger.info("Creating new worksheet");
+      const worksheetRef = db.collection("worksheets").doc();
+      await worksheetRef.set(worksheet);
+      worksheetId = worksheetRef.id;
+    }
 
     // Return success response with worksheet data
     response.json({
       success: true,
-      worksheet: {id: worksheetRef.id, ...worksheet},
+      worksheet: {id: worksheetId, ...worksheet},
       count: problems.length,
     });
 

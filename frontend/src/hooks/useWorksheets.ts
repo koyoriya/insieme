@@ -28,9 +28,26 @@ export function useWorksheets() {
       q,
       (snapshot) => {
         const worksheetList: Worksheet[] = [];
+        const now = Date.now();
+        const CREATION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+
         snapshot.forEach((doc) => {
-          worksheetList.push({ id: doc.id, ...doc.data() } as Worksheet);
+          const worksheet = { id: doc.id, ...doc.data() } as Worksheet;
+          
+          // Filter out old "creating" worksheets that are likely stuck
+          if (worksheet.status === 'creating') {
+            const createdAt = new Date(worksheet.createdAt).getTime();
+            const isStuck = now - createdAt > CREATION_TIMEOUT;
+            
+            if (isStuck) {
+              console.warn(`Filtering out stuck creating worksheet: ${worksheet.id}`);
+              return; // Skip this worksheet
+            }
+          }
+          
+          worksheetList.push(worksheet);
         });
+        
         setWorksheets(worksheetList);
         setLoading(false);
         setError(null);
