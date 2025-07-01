@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useWorksheets } from "../../hooks/useWorksheets";
 import { useWorksheetSubmissions } from "../../hooks/useWorksheetSubmissions";
 import { WorksheetStatus, Worksheet, WorksheetSubmission } from "../../types";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 
 // WorksheetItem component for displaying individual worksheets
@@ -152,8 +152,14 @@ export default function Dashboard() {
       console.log("Function response:", data);
       
       if (data.success && data.worksheet) {
-        // Delete temporary worksheet as the real one is created
-        // (The function will have created the real worksheet)
+        // Always delete temporary worksheet after successful generation
+        // This handles both cases: updated temp worksheet and newly created worksheet
+        try {
+          await deleteDoc(doc(db, 'worksheets', tempWorksheetId));
+          console.log("Deleted temporary worksheet:", tempWorksheetId);
+        } catch (deleteError) {
+          console.warn("Failed to delete temporary worksheet (may already be updated):", deleteError);
+        }
         alert(`${data.count}問のワークシートが生成されました！`);
       } else {
         // Update worksheet status to error
