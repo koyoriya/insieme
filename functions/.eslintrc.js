@@ -6,24 +6,26 @@ module.exports = {
   },
   extends: [
     "eslint:recommended",
-    "@typescript-eslint/recommended",
   ],
   parser: "@typescript-eslint/parser",
   parserOptions: {
-    project: ["tsconfig.json"],
+    ecmaVersion: 2018,
     sourceType: "module",
   },
   ignorePatterns: [
     "/lib/**/*", // Ignore built files.
     "/generated/**/*", // Ignore generated files.
+    "*.js",
   ],
   plugins: [
     "@typescript-eslint",
-    "import",
   ],
   rules: {
     "quotes": ["error", "double"],
-    "import/no-unresolved": 0,
     "indent": ["error", 2],
+    "no-unused-vars": "off",
+    "@typescript-eslint/no-unused-vars": ["error"],
+    "no-trailing-spaces": "error",
+    "object-curly-spacing": ["error", "never"],
   },
 };
