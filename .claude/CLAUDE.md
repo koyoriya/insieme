@@ -37,8 +37,8 @@
   - Firebase Functions: `npm install && npm run lint && npm run build`
   - セキュリティスキャン: Trivy による脆弱性検査
 - デプロイは Firebase Hosting と Functions へ自動実行
-  - main ブランチ: 本番環境
-  - develop ブランチ: ステージング環境（オプション）
+  - main ブランチ: 本番環境への自動デプロイ
+  - 開発環境: ローカルから手動デプロイ
 
 ## 使用ツール
 - Git

@@ -76,10 +76,10 @@ make clean              # クリーンアップ
 
 ### 🌍 環境構成
 
-| 環境 | ブランチ | Firebase プロジェクト | 用途 |
-|------|---------|---------------------|------|
-| **開発** | `develop` | `insieme-dev-d7459` | 開発・テスト環境 |
-| **本番** | `main` | `insieme-463312` | 本番サービス |
+| 環境 | デプロイ方法 | Firebase プロジェクト | 用途 |
+|------|-------------|---------------------|------|
+| **開発** | ローカル手動 | `insieme-dev-d7459` | 開発・テスト・検証環境 |
+| **本番** | `main`ブランチ自動 | `insieme-463312` | 本番サービス |
 
 ### 🛠️ 事前準備
 
@@ -112,14 +112,17 @@ make get-firebase-token
 
 GitHub リポジトリの **Settings > Secrets and variables > Actions** で以下を設定：
 
-#### 必須シークレット
+#### 必須シークレット（本番自動デプロイ用）
 | Secret名 | 説明 | 取得方法 |
 |----------|------|----------|
 | `FIREBASE_TOKEN` | Firebase CLI認証トークン | `firebase login:ci` |
 | `FIREBASE_PROJECT_ID` | 本番用FirebaseプロジェクトID | `insieme-463312` |
-| `FIREBASE_PROJECT_ID_DEV` | 開発用FirebaseプロジェクトID | `insieme-dev-d7459` |
 | `GEMINI_API_KEY` | 本番用 Gemini API キー | Google AI Studio |
-| `GEMINI_API_KEY_DEV` | 開発用 Gemini API キー | Google AI Studio |
+
+#### ローカル開発用
+| 環境変数 | 説明 | 設定場所 |
+|----------|------|----------|
+| `GEMINI_API_KEY_DEV` | 開発用 Gemini API キー | ローカル環境変数 |
 
 #### Firebase CLI トークン取得
 
@@ -133,9 +136,9 @@ firebase login:ci
 ### 🔄 CI/CDパイプライン
 
 #### 自動デプロイフロー
-- **develop ブランチ**: 開発環境（`insieme-dev-d7459`）へ自動デプロイ
 - **main ブランチ**: 本番環境（`insieme-463312`）へ自動デプロイ
 - **Pull Request**: CI テスト（ビルド・リント・型チェック）実行
+- **開発環境**: ローカルから手動デプロイ（`insieme-dev-d7459`）
 
 #### パイプライン構成
 1. **CI段階**: 
@@ -153,20 +156,39 @@ firebase login:ci
 #### GitHub Actions UI使用
 - Actions タブから `workflow_dispatch` で手動実行可能
 
-#### ローカルデプロイ
+#### ローカルから開発環境デプロイ
+
+**開発・検証用のデプロイ手順**:
 
 ```bash
-# プロジェクト切り替え
-firebase use production  # 本番環境
-firebase use dev        # 開発環境
+# 1. 開発環境用 Gemini API キー設定
+export GEMINI_API_KEY_DEV="your_dev_api_key"
 
-# 全体をデプロイ
+# 2. 開発プロジェクトに切り替え
+firebase use dev  # insieme-dev-d7459
+
+# 3. Functions 環境変数設定
+firebase functions:config:set gemini.api_key="$GEMINI_API_KEY_DEV"
+
+# 4. ビルド実行
+cd frontend && npm run build
+cd ../functions && npm run build
+
+# 5. デプロイ実行
 firebase deploy
 
-# 個別デプロイ
-firebase deploy --only hosting    # フロントエンドのみ
-firebase deploy --only functions  # Functions のみ
-firebase deploy --only firestore:rules  # Firestore ルールのみ
+# 個別デプロイオプション
+firebase deploy --only hosting           # フロントエンドのみ
+firebase deploy --only functions         # Functions のみ
+firebase deploy --only firestore:rules   # Firestore ルールのみ
+```
+
+#### 本番環境デプロイ（手動実行時）
+
+```bash
+# 本番環境（通常は main ブランチで自動実行）
+firebase use production  # insieme-463312
+firebase deploy
 ```
 
 ## 開発
@@ -216,15 +238,16 @@ firebase deploy --dry-run
 ### 🔧 Firebase Functions環境変数
 
 ```bash
-# 本番環境に設定
-firebase functions:config:set gemini.api_key="YOUR_PRODUCTION_API_KEY" --project $FIREBASE_PROJECT_ID
+# 本番環境に設定（通常は CI/CD で自動設定）
+firebase functions:config:set gemini.api_key="YOUR_PRODUCTION_API_KEY" --project insieme-463312
 
-# 開発環境に設定
-firebase functions:config:set gemini.api_key="YOUR_DEV_API_KEY" --project $FIREBASE_PROJECT_ID_DEV
+# 開発環境に設定（ローカルから手動設定）
+firebase use dev  # insieme-dev-d7459 に切り替え
+firebase functions:config:set gemini.api_key="YOUR_DEV_API_KEY"
 
-# 設定確認（プロジェクトIDを実際の値に置き換えて実行）
-firebase functions:config:get --project insieme-463312
-firebase functions:config:get --project insieme-dev-d7459
+# 設定確認
+firebase functions:config:get --project insieme-463312  # 本番
+firebase functions:config:get --project insieme-dev-d7459  # 開発
 
 # Functions内での使用方法
 # import * as functions from 'firebase-functions';
