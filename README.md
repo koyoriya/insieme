@@ -1,36 +1,49 @@
 # Insieme
 
-LLMによる問題作成&添削アプリ
+**LLMによるワークシート型問題作成&学習システム**
 
-## 機能
+## 概要
 
-|機能|画面|内容|
-|-|-|-|
-|ログイン|ログイン画面|ログイン/アカウント登録をする．GoogleによるSSO|
-|問題作成|トップページ|LLMにより問題を作成する|
-|問題閲覧|問題ページ|問題を閲覧|
-|問題印刷|問題ページ|問題を印刷|
-|問題添削|問題ページ|pdfで上げられた問題を添削して，点数をつけて，フィードバックを行う|
+InsiemeはGoogle Gemini AIを活用した教育支援アプリケーションです。ユーザーが指定したトピックに基づいて、自動的に学習問題を生成し、ワークシート形式で提供します。
 
-## 画面
+## 主要機能
 
-|画面|表示内容|
-|-|-|
-|ログイン画面|ログインフォーム|
-|トップページ|問題作成フォーム/作成した問題一覧|
-|問題ページ|問題内容/印刷ボタン/提出フォーム|
+### 🎯 コア機能
+- **ワークシート生成**: LLMによる自動問題作成（複数問題をセット化）
+- **問題形式**: 選択問題・記述問題・論述問題の自動判定と組み合わせ
+- **ユーザー認証**: Firebase Authentication（Google SSO対応）
+- **回答・採点**: ワークシート単位での一括回答提出と自動採点
+- **学習履歴**: 作成したワークシートと提出状況の管理
+
+### 📊 ワークシート管理
+- **状態追跡**: 作成中 → 未回答 → 提出済み → エラー状態の管理
+- **縦列表示**: ダッシュボードでのワークシート一覧表示
+- **メタデータ**: 難易度・トピック・作成日時・問題数の表示
+- **フィルタリング**: 状態別・期間別での絞り込み
+
+### 🔐 アクセス制御
+- **プライベート**: 作成者のみがアクセス可能
+- **模範解答保護**: 回答提出後のみ閲覧可能
+- **編集制限**: 作成後のワークシート編集は不可
+
+### 📱 ユーザーインターフェース
+- **レスポンシブデザイン**: モバイル・タブレット・デスクトップ対応
+- **リアルタイム更新**: Firestoreによるリアルタイムデータ同期
+- **直感的操作**: 使いやすいフォームとナビゲーション
 
 ## 技術スタック
 
-| 要素 | 技術 | 用途 |
-|------|------|------|
-| フロントエンド | Next.js + Tailwind CSS | 静的Webアプリケーション |
-| ホスティング | Firebase Hosting | 静的サイト配信 |
-| バックエンド | Firebase Functions (Node.js) | サーバーレスAPI |
-| LLM | **Gemma**（GCP Vertex AI） | 問題生成・添削 |
-| データベース | Cloud Firestore | NoSQLデータベース |
-| 認証 | Firebase Authentication | ユーザー認証 |
-| インフラ | **Firebase (Google Cloud)** | サーバーレスプラットフォーム |
+| 要素 | 技術 | 用途 | 詳細 |
+|------|------|------|------|
+| **フロントエンド** | Next.js 15 + TypeScript | React Webアプリケーション | 静的エクスポート、App Router |
+| **スタイリング** | Tailwind CSS | レスポンシブUI | ユーティリティファーストCSS |
+| **ホスティング** | Firebase Hosting | 静的サイト配信 | CDN、カスタムドメイン対応 |
+| **バックエンド** | Firebase Functions (Node.js 18) | サーバーレスAPI | HTTP関数、CORS対応 |
+| **AI/LLM** | **Google Gemini 2.0 Flash** | 問題生成 | プロンプトエンジニアリング |
+| **データベース** | Cloud Firestore | NoSQLデータベース | リアルタイム同期、セキュリティルール |
+| **認証** | Firebase Authentication | ユーザー認証 | Google OAuth、JWT |
+| **CI/CD** | GitHub Actions | 自動デプロイ | 環境分離、テスト自動化 |
+| **開発ツール** | ESLint + TypeScript | コード品質 | 型安全性、リンティング |
 
 ## セットアップ
 
@@ -59,7 +72,14 @@ make dev-functions      # Firebase Functions開発サーバー起動
 make clean              # クリーンアップ
 ```
 
-## CI/CD セットアップ
+## 環境・デプロイ設定
+
+### 🌍 環境構成
+
+| 環境 | ブランチ | Firebase プロジェクト | 用途 |
+|------|---------|---------------------|------|
+| **開発** | `develop` | `insieme-dev-d7459` | 開発・テスト環境 |
+| **本番** | `main` | `insieme-463312` | 本番サービス |
 
 ### 🛠️ 事前準備
 
@@ -88,20 +108,64 @@ make setup-firebase PROJECT_ID=your-project-id
 make get-firebase-token
 ```
 
-### 📝 GitHub Secrets
+### 📝 GitHub Secrets設定
 
-以下のSecretsをGitHubリポジトリに設定してください：
+GitHub リポジトリの **Settings > Secrets and variables > Actions** で以下を設定：
 
-| Secret名 | 取得方法 |
-|----------|----------|
-| `FIREBASE_PROJECT_ID` | FirebaseプロジェクトID |
-| `FIREBASE_TOKEN` | `firebase login:ci`で取得 |
+#### 必須シークレット
+| Secret名 | 説明 | 取得方法 |
+|----------|------|----------|
+| `FIREBASE_TOKEN` | Firebase CLI認証トークン | `firebase login:ci` |
+| `GEMINI_API_KEY` | 本番用 Gemini API キー | Google AI Studio |
+| `GEMINI_API_KEY_DEV` | 開発用 Gemini API キー | Google AI Studio |
 
-### 🔄 デプロイの流れ
+#### Firebase CLI トークン取得
 
-- **開発**: `develop` ブランチにプッシュでCIが実行
-- **本番デプロイ**: `main` ブランチにマージでCI + デプロイが実行
-- **手動デプロイ**: GitHub Actionsから手動実行可能
+```bash
+# Firebase CLI にログイン
+firebase login:ci
+
+# 表示されたトークンを FIREBASE_TOKEN に設定
+```
+
+### 🔄 CI/CDパイプライン
+
+#### 自動デプロイフロー
+- **develop ブランチ**: 開発環境（`insieme-dev-d7459`）へ自動デプロイ
+- **main ブランチ**: 本番環境（`insieme-463312`）へ自動デプロイ
+- **Pull Request**: CI テスト（ビルド・リント・型チェック）実行
+
+#### パイプライン構成
+1. **CI段階**: 
+   - フロントエンド: ビルド・リント・型チェック・テスト
+   - Functions: ビルド・リント・TypeScript コンパイル
+   - セキュリティ: Trivy脆弱性スキャン
+
+2. **CD段階**:
+   - 環境変数設定（Firebase Functions config）
+   - 本番/開発環境への並列デプロイ
+   - Hosting + Functions 同時デプロイ
+
+### 🚀 手動デプロイ
+
+#### GitHub Actions UI使用
+- Actions タブから `workflow_dispatch` で手動実行可能
+
+#### ローカルデプロイ
+
+```bash
+# プロジェクト切り替え
+firebase use production  # 本番環境
+firebase use dev        # 開発環境
+
+# 全体をデプロイ
+firebase deploy
+
+# 個別デプロイ
+firebase deploy --only hosting    # フロントエンドのみ
+firebase deploy --only functions  # Functions のみ
+firebase deploy --only firestore:rules  # Firestore ルールのみ
+```
 
 ## 開発
 
@@ -145,11 +209,114 @@ firebase functions:list
 firebase deploy --dry-run
 ```
 
+## 環境変数管理
+
+### 🔧 Firebase Functions環境変数
+
+```bash
+# 本番環境に設定
+firebase functions:config:set gemini.api_key="YOUR_PRODUCTION_API_KEY" --project insieme-463312
+
+# 開発環境に設定
+firebase functions:config:set gemini.api_key="YOUR_DEV_API_KEY" --project insieme-dev-d7459
+
+# 設定確認
+firebase functions:config:get --project insieme-463312
+firebase functions:config:get --project insieme-dev-d7459
+
+# Functions内での使用方法
+# import * as functions from 'firebase-functions';
+# const apiKey = functions.config().gemini.api_key;
+```
+
+### 🌐 フロントエンド環境変数
+
+ローカル開発用の `.env.local` ファイル:
+
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
+```
+
+## データ構造
+
+### 📄 Worksheet（ワークシート）
+
+```typescript
+interface Worksheet {
+  id: string;                    // 一意識別子
+  title: string;                 // ワークシートタイトル
+  description?: string;          // 説明文
+  subject: string;               // 科目
+  topic: string;                 // トピック
+  difficulty: string;            // 難易度 (easy/medium/hard)
+  createdAt: string;             // 作成日時 (ISO string)
+  createdBy: string;             // 作成者UID
+  problems: Problem[];           // 含まれる問題リスト
+  status?: WorksheetStatus;      // ワークシート状態
+}
+
+type WorksheetStatus = 'creating' | 'error' | 'ready' | 'submitted';
+```
+
+### ❓ Problem（問題）
+
+```typescript
+interface Problem {
+  id: string;                    // 問題ID
+  question: string;              // 問題文
+  options?: string[] | null;     // 選択肢（選択問題の場合）
+  correctAnswer: string;         // 正解
+  explanation: string;           // 解説
+  type?: string;                 // 問題形式
+}
+```
+
+### 📝 WorksheetSubmission（提出）
+
+```typescript
+interface WorksheetSubmission {
+  id: string;                    // 提出ID
+  worksheetId: string;           // ワークシートID
+  userId: string;                // 提出者UID
+  answers: ProblemAnswer[];      // 回答リスト
+  submittedAt: string;           // 提出日時
+  score?: number;                // 得点
+  totalProblems: number;         // 総問題数
+}
+
+interface ProblemAnswer {
+  problemId: string;             // 問題ID
+  answer: string;                // ユーザーの回答
+  isCorrect?: boolean;           // 正誤判定
+}
+```
+
+## セキュリティ・制限
+
+### 🔐 Firestore セキュリティルール
+
+- **ワークシート**: 作成者のみ読み取り可能
+- **提出データ**: 提出者のみアクセス可能
+- **Functions**: 全ユーザーがワークシート作成可能
+- **認証**: Firebase Authentication必須
+
+### 📊 利用制限
+
+- **LLM生成制限**: 実装予定（1日あたり制限）
+- **ワークシート編集**: 作成後は編集不可
+- **模範解答**: 提出後のみ閲覧可能
+- **データプライバシー**: 全て作成者のプライベートデータ
+
 ## トラブルシューティング
 
-### Firebaseセットアップでのエラー
+### 🔥 Firebase関連エラー
 
-#### Firebase CLI認証エラー
+#### 認証エラー
 
 ```bash
 # Firebase再ログイン
@@ -157,46 +324,71 @@ firebase login --reauth
 
 # 現在のユーザー確認
 firebase login:list
-```
 
-#### プロジェクト権限エラー
-
-```bash
-# プロジェクトのオーナー権限があることを確認
+# プロジェクト権限確認
 firebase projects:list
-
-# Firebase Hostingが有効になっていることを確認
-# https://console.firebase.google.com/project/your-project/hosting
-```
-
-#### 環境変数エラー
-
-- `.env.local`ファイルが正しく設定されていることを確認
-- Firebase Console > Project Settings で正しい値を取得
-
-#### ビルドエラー
-
-```bash
-# 依存関係の再インストール
-cd frontend && npm ci
-cd ../functions && npm ci
-
-# キャッシュクリア
-npm cache clean --force
-
-# ビルドテスト
-npm run build
 ```
 
 #### デプロイエラー
 
 ```bash
-# Firebase CLIバージョン確認
-firebase --version
+# 権限確認
+firebase projects:list
 
-# プロジェクト設定確認
-firebase use
+# プロジェクト切り替え
+firebase use insieme-463312  # または insieme-dev-d7459
 
 # デプロイ前テスト
 firebase deploy --dry-run
+
+# 個別デプロイでエラー箇所特定
+firebase deploy --only hosting
+firebase deploy --only functions
 ```
+
+### 🏗️ ビルドエラー
+
+```bash
+# 依存関係クリーンインストール
+cd frontend && rm -rf node_modules package-lock.json && npm install
+cd ../functions && rm -rf node_modules package-lock.json && npm install
+
+# TypeScript型チェック
+npm run type-check
+
+# ビルドテスト
+npm run build
+```
+
+### 🔧 開発環境エラー
+
+```bash
+# Next.js キャッシュクリア
+cd frontend && rm -rf .next
+
+# Firebase エミュレータリセット
+firebase emulators:start --import=./backup --export-on-exit=./backup
+
+# 環境変数確認
+cat .env.local
+```
+
+### 📱 Functions関連エラー
+
+```bash
+# Functions ログ確認
+firebase functions:log --project insieme-463312
+
+# 特定関数のログ
+firebase functions:log --only generateProblems
+
+# ローカル Functions テスト
+cd functions && npm run serve
+```
+
+### 🌐 GitHub Actions エラー
+
+1. **Secrets確認**: GitHub リポジトリの Secrets 設定を確認
+2. **権限確認**: Firebase プロジェクトの IAM 権限確認
+3. **トークン更新**: `firebase login:ci` で新しいトークン取得
+4. **ログ確認**: GitHub Actions の詳細ログを確認
