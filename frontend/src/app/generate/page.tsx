@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useAuth } from "../../components/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { MathRenderer } from "../../components/MathRenderer";
+import { useWorksheetPDF } from "../../hooks/usePDF";
 
 interface Problem {
   id: string;
@@ -21,6 +23,9 @@ export default function GenerateProblems() {
   const [numQuestions, setNumQuestions] = useState(5);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedProblems, setGeneratedProblems] = useState<Problem[]>([]);
+
+  // PDF generation hook
+  const { isGenerating: isPDFGenerating, error: pdfError, generateProblemsPDF, generateAnswersPDF, clearError } = useWorksheetPDF();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -42,6 +47,32 @@ export default function GenerateProblems() {
   if (!user) {
     return null;
   }
+
+  // PDF export handler
+  const handleExportPDF = async (includeAnswers: boolean = false) => {
+    if (generatedProblems.length === 0) return;
+    
+    try {
+      clearError();
+      const worksheetData = {
+        title: `${topic} - 生成された問題`,
+        description: `${topic}に関する${numQuestions}問の練習問題`,
+        problems: generatedProblems,
+        createdAt: new Date().toISOString(),
+        difficulty,
+        topic
+      };
+
+      if (includeAnswers) {
+        await generateAnswersPDF(worksheetData, `${topic}_解答付き.pdf`);
+      } else {
+        await generateProblemsPDF(worksheetData, `${topic}_問題のみ.pdf`);
+      }
+    } catch (error) {
+      console.error('PDF export failed:', error);
+      alert('PDF出力に失敗しました。もう一度お試しください。');
+    }
+  };
 
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -99,6 +130,26 @@ export default function GenerateProblems() {
           </div>
 
           <div className="p-6">
+            {/* PDF Error Display */}
+            {pdfError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <span className="text-red-600">⚠️</span>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-800">{pdfError}</p>
+                    <button
+                      onClick={clearError}
+                      className="mt-1 text-xs text-red-600 hover:text-red-800 underline"
+                    >
+                      エラーを閉じる
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -175,7 +226,9 @@ export default function GenerateProblems() {
                   <h3 className="font-semibold text-lg mb-3">
                     問題 {index + 1}
                   </h3>
-                  <p className="text-gray-800 mb-4">{problem.question}</p>
+                  <div className="text-gray-800 mb-4">
+                    <MathRenderer>{problem.question}</MathRenderer>
+                  </div>
                   
                   {problem.options && (
                     <div className="mb-4">
@@ -183,7 +236,7 @@ export default function GenerateProblems() {
                       <ul className="space-y-1">
                         {problem.options.map((option, optIndex) => (
                           <li key={optIndex} className="text-gray-700">
-                            {String.fromCharCode(65 + optIndex)}. {option}
+                            {String.fromCharCode(65 + optIndex)}. <MathRenderer>{option}</MathRenderer>
                           </li>
                         ))}
                       </ul>
@@ -191,18 +244,33 @@ export default function GenerateProblems() {
                   )}
                   
                   <div className="bg-green-50 p-3 rounded">
-                    <p className="font-medium text-green-800">正答: {problem.correctAnswer}</p>
-                    <p className="text-green-700 mt-1">{problem.explanation}</p>
+                    <p className="font-medium text-green-800">
+                      正答: <MathRenderer>{problem.correctAnswer}</MathRenderer>
+                    </p>
+                    <div className="text-green-700 mt-1">
+                      <MathRenderer>{problem.explanation}</MathRenderer>
+                    </div>
                   </div>
                 </div>
               ))}
               
-              <div className="flex space-x-4">
+              <div className="flex flex-wrap gap-4">
                 <button className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
                   問題を保存
                 </button>
-                <button className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-                  PDFでダウンロード
+                <button 
+                  onClick={() => handleExportPDF(false)}
+                  disabled={isPDFGenerating}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-bold py-2 px-4 rounded"
+                >
+                  {isPDFGenerating ? '生成中...' : 'PDF出力（問題のみ）'}
+                </button>
+                <button 
+                  onClick={() => handleExportPDF(true)}
+                  disabled={isPDFGenerating}
+                  className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold py-2 px-4 rounded"
+                >
+                  {isPDFGenerating ? '生成中...' : 'PDF出力（解答付き）'}
                 </button>
               </div>
             </div>
