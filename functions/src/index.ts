@@ -49,10 +49,10 @@ export const health = onRequest(async (request, response) => {
 export const api = onRequest(async (request, response) => {
   return new Promise((resolve) => {
     corsHandler(request, response, async () => {
-    const {method, path} = request;
-    
-    try {
-      switch (method) {
+      const {method, path} = request;
+
+      try {
+        switch (method) {
         case "GET":
           if (path === "/users") {
             // Get users from Firestore
@@ -66,7 +66,7 @@ export const api = onRequest(async (request, response) => {
             response.status(404).json({error: "Endpoint not found"});
           }
           break;
-          
+
         case "POST":
           if (path === "/users") {
             // Create user in Firestore
@@ -80,10 +80,10 @@ export const api = onRequest(async (request, response) => {
             response.status(404).json({error: "Endpoint not found"});
           }
           break;
-          
+
         default:
           response.status(405).json({error: "Method not allowed"});
-      }
+        }
       } catch (error) {
         logger.error("API error", error);
         response.status(500).json({
@@ -103,11 +103,11 @@ export const generateProblems = onRequest({
   try {
     logger.info("generateProblems called", {
       method: request.method,
-      contentType: request.headers['content-type'],
+      contentType: request.headers["content-type"],
       rawBody: request.rawBody?.toString(),
       body: request.body
     });
-    
+
     if (request.method !== "POST") {
       response.status(405).json({error: "Method not allowed"});
       return;
@@ -125,7 +125,7 @@ export const generateProblems = onRequest({
       numQuestions,
       userId,
     } = request.body;
-    
+
     logger.info("Parsed request body", {subject, difficulty, topic, numQuestions, userId});
 
     if (!subject || !topic || !numQuestions || !userId) {
@@ -142,14 +142,14 @@ export const generateProblems = onRequest({
     logger.info("Gemini model initialized");
 
     // Create prompt for problem generation
-      const difficultyMap: {[key: string]: string} = {
-        easy: "簡単",
-        medium: "普通",
-        hard: "難しい",
-      };
-      const difficultyText = difficultyMap[difficulty] || "普通";
+    const difficultyMap: {[key: string]: string} = {
+      easy: "簡単",
+      medium: "普通",
+      hard: "難しい",
+    };
+    const difficultyText = difficultyMap[difficulty] || "普通";
 
-      const prompt = `
+    const prompt = `
 あなたは教育問題作成の専門家です。以下の条件に従って学習問題を${numQuestions}問作成してください。
 
 【条件】
@@ -187,65 +187,65 @@ JSON形式で以下の構造で出力してください：
 - 純粋なJSONのみを返すこと
 `;
 
-      logger.info("Calling Gemini API");
-      const result = await model.generateContent(prompt);
-      let responseText = result.response.text();
-      logger.info("Gemini API response received", {responseLength: responseText.length});
+    logger.info("Calling Gemini API");
+    const result = await model.generateContent(prompt);
+    let responseText = result.response.text();
+    logger.info("Gemini API response received", {responseLength: responseText.length});
 
-      // Remove markdown code blocks if present
-      responseText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      logger.info("Cleaned response text", {cleanedText: responseText.substring(0, 200) + "..."});
+    // Remove markdown code blocks if present
+    responseText = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+    logger.info("Cleaned response text", {cleanedText: responseText.substring(0, 200) + "..."});
 
-      let problemData;
-      try {
-        problemData = JSON.parse(responseText);
-      } catch (parseError) {
-        logger.error("Failed to parse Gemini response as JSON", {
-          originalResponse: responseText.substring(0, 500),
-          error: parseError,
-        });
-        response.status(500).json({
-          error: "Failed to parse AI response",
-          details: "Response was not valid JSON",
-        });
-        return;
-      }
-
-      if (!problemData.problems || !Array.isArray(problemData.problems)) {
-        response.status(500).json({
-          error: "Invalid response structure from AI",
-        });
-        return;
-      }
-
-      // Create worksheet with problems
-      const problems = problemData.problems.map((problem: any, index: number) => ({
-        ...problem,
-        id: `problem_${Date.now()}_${index}`,
-      }));
-
-      const worksheet = {
-        title: `${topic} - ${difficulty === 'easy' ? '簡単' : difficulty === 'medium' ? '普通' : '難しい'}`,
-        description: `${topic}に関する${numQuestions}問の練習問題`,
-        subject,
-        topic,
-        difficulty,
-        createdAt: new Date().toISOString(),
-        createdBy: userId,
-        problems,
-        status: 'ready',
-      };
-
-      // Save worksheet to Firestore
-      const worksheetRef = db.collection("worksheets").doc();
-      await worksheetRef.set(worksheet);
-
-      // Return success response with worksheet data
-      response.json({
-        success: true,
-        worksheet: { id: worksheetRef.id, ...worksheet },
-        count: problems.length,
+    let problemData;
+    try {
+      problemData = JSON.parse(responseText);
+    } catch (parseError) {
+      logger.error("Failed to parse Gemini response as JSON", {
+        originalResponse: responseText.substring(0, 500),
+        error: parseError,
       });
+      response.status(500).json({
+        error: "Failed to parse AI response",
+        details: "Response was not valid JSON",
+      });
+      return;
+    }
+
+    if (!problemData.problems || !Array.isArray(problemData.problems)) {
+      response.status(500).json({
+        error: "Invalid response structure from AI",
+      });
+      return;
+    }
+
+    // Create worksheet with problems
+    const problems = problemData.problems.map((problem: any, index: number) => ({
+      ...problem,
+      id: `problem_${Date.now()}_${index}`,
+    }));
+
+    const worksheet = {
+      title: `${topic} - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`,
+      description: `${topic}に関する${numQuestions}問の練習問題`,
+      subject,
+      topic,
+      difficulty,
+      createdAt: new Date().toISOString(),
+      createdBy: userId,
+      problems,
+      status: "ready",
+    };
+
+    // Save worksheet to Firestore
+    const worksheetRef = db.collection("worksheets").doc();
+    await worksheetRef.set(worksheet);
+
+    // Return success response with worksheet data
+    response.json({
+      success: true,
+      worksheet: {id: worksheetRef.id, ...worksheet},
+      count: problems.length,
+    });
 
   } catch (error) {
     logger.error("Problem generation failed", {

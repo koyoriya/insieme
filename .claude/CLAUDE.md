@@ -2,7 +2,7 @@
 
 ## プロジェクト概要
 
-README.mdを参照してください．わからないところがあったら聞いてください．
+"""README.mdを常に参照してください．"""わからないところがあったら聞いてください．
 
 ## git
 ### Git ブランチ戦略
@@ -33,21 +33,24 @@ README.mdを参照してください．わからないところがあったら�
 ### テストと CI/CD
 - プロジェクトルートに `.github/workflows/ci.yml` を配置
 - プッシュ／プルリクエスト時に以下を実行:
-  - `npm install && npm test`
-  - `npm run lint`
-  - ビルド: `npm run build`
-- デプロイは GCP Cloud Run へ自動実行
+  - フロントエンド: `npm install && npm test && npm run lint && npm run build`
+  - Firebase Functions: `npm install && npm run lint && npm run build`
+  - セキュリティスキャン: Trivy による脆弱性検査
+- デプロイは Firebase Hosting と Functions へ自動実行
+  - main ブランチ: 本番環境への自動デプロイ
+  - 開発環境: ローカルから手動デプロイ
 
 ## 使用ツール
 - Git
-- Node.js (>=16.x)
-- pnpm
+- Node.js (>=18.x)
+- npm
 - Next.js
-- Contentlayer
+- Firebase CLI
+- Firebase Functions
+- Firebase Hosting
+- Firestore
 - Docker
 - GitHub CLI
-- GCP Cloud SDK (gcloud)
-- Cloudflare CLI (wrangler)
 - VSCode（推奨）
 
 ## 機能
