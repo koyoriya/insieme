@@ -1,14 +1,14 @@
 {
   "projects": {
-    "default": "insieme",
+    "default": "insieme-463312",
     "dev": "insieme-dev-d7459",
-    "production": "insieme"
+    "production": "insieme-463312"
   },
   "targets": {
-    "insieme": {
+    "insieme-463312": {
       "hosting": {
         "frontend": [
-          "insieme"
+          "insieme-463312"
         ]
       }
     },
