@@ -7,6 +7,8 @@ import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import Link from "next/link";
 import { Worksheet, WorksheetSubmission, ProblemAnswer } from "../../types";
+import { MathRenderer } from "../../components/MathRenderer";
+import { useWorksheetPDF } from "../../hooks/usePDF";
 
 function WorksheetPageContent() {
   const { user, loading } = useAuth();
@@ -20,6 +22,9 @@ function WorksheetPageContent() {
   const [selectedOptions, setSelectedOptions] = useState<{[problemId: string]: string}>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [worksheetLoading, setWorksheetLoading] = useState(true);
+
+  // PDF generation hook
+  const { isGenerating, error: pdfError, generateProblemsPDF, generateAnswersPDF, clearError } = useWorksheetPDF();
 
   const loadWorksheet = useCallback(async () => {
     if (!worksheetId) return;
@@ -133,6 +138,32 @@ function WorksheetPageContent() {
     }
   };
 
+  // PDF export handlers
+  const handleExportPDF = async (includeAnswers: boolean = false) => {
+    if (!worksheet) return;
+    
+    try {
+      clearError();
+      const worksheetData = {
+        title: worksheet.title,
+        description: worksheet.description,
+        problems: worksheet.problems,
+        createdAt: worksheet.createdAt,
+        difficulty: worksheet.difficulty,
+        topic: worksheet.topic
+      };
+
+      if (includeAnswers) {
+        await generateAnswersPDF(worksheetData, `${worksheet.title}_解答付き.pdf`);
+      } else {
+        await generateProblemsPDF(worksheetData, `${worksheet.title}_問題のみ.pdf`);
+      }
+    } catch (error) {
+      console.error('PDF export failed:', error);
+      alert('PDF出力に失敗しました。もう一度お試しください。');
+    }
+  };
+
   if (loading || worksheetLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -164,7 +195,27 @@ function WorksheetPageContent() {
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h1 className="text-2xl font-bold text-gray-900">{worksheet.title}</h1>
-              <div className="flex space-x-2">
+              <div className="flex items-center space-x-2">
+                {/* PDF Export Buttons */}
+                <div className="flex space-x-1">
+                  <button
+                    onClick={() => handleExportPDF(false)}
+                    disabled={isGenerating}
+                    className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-md transition-colors"
+                  >
+                    {isGenerating ? '生成中...' : 'PDF出力'}
+                  </button>
+                  {submission && (
+                    <button
+                      onClick={() => handleExportPDF(true)}
+                      disabled={isGenerating}
+                      className="px-3 py-1 text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-md transition-colors"
+                    >
+                      {isGenerating ? '生成中...' : '解答付きPDF'}
+                    </button>
+                  )}
+                </div>
+                
                 <span className={`px-2 py-1 text-xs rounded ${
                   worksheet.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
                   worksheet.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
@@ -194,6 +245,26 @@ function WorksheetPageContent() {
           </div>
 
           <div className="p-6">
+            {/* PDF Error Display */}
+            {pdfError && (
+              <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <span className="text-red-600">⚠️</span>
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-800">{pdfError}</p>
+                    <button
+                      onClick={clearError}
+                      className="mt-1 text-xs text-red-600 hover:text-red-800 underline"
+                    >
+                      エラーを閉じる
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {!submission ? (
               <>
                 <h2 className="text-lg font-semibold mb-4">問題一覧と解答</h2>
@@ -212,7 +283,7 @@ function WorksheetPageContent() {
                       </div>
                       
                       <h3 className="font-medium text-gray-900 mb-4">
-                        {problem.question}
+                        <MathRenderer>{problem.question}</MathRenderer>
                       </h3>
                       
                       {problem.options ? (
@@ -235,7 +306,9 @@ function WorksheetPageContent() {
                                 onChange={(e) => handleOptionChange(problem.id, e.target.value)}
                                 className="mr-3"
                               />
-                              <span className="text-gray-700">{option}</span>
+                              <span className="text-gray-700">
+                                <MathRenderer>{option}</MathRenderer>
+                              </span>
                             </label>
                           ))}
                         </div>
@@ -309,22 +382,28 @@ function WorksheetPageContent() {
                         </div>
                         
                         <h3 className="font-medium text-gray-900 mb-4">
-                          {problem.question}
+                          <MathRenderer>{problem.question}</MathRenderer>
                         </h3>
                         
                         <div className="bg-blue-50 p-4 rounded-lg mb-4">
                           <h4 className="font-medium mb-2">あなたの回答:</h4>
-                          <p className="text-gray-800">{userAnswer?.answer}</p>
+                          <p className="text-gray-800">
+                            <MathRenderer>{userAnswer?.answer || ''}</MathRenderer>
+                          </p>
                         </div>
                         
                         <div className="bg-gray-50 p-4 rounded-lg mb-4">
                           <h4 className="font-medium mb-2">模範解答:</h4>
-                          <p className="text-gray-800">{problem.correctAnswer}</p>
+                          <p className="text-gray-800">
+                            <MathRenderer>{problem.correctAnswer}</MathRenderer>
+                          </p>
                         </div>
                         
                         <div className="bg-green-50 p-4 rounded-lg">
                           <h4 className="font-medium mb-2">解説:</h4>
-                          <p className="text-gray-800">{problem.explanation}</p>
+                          <p className="text-gray-800">
+                            <MathRenderer>{problem.explanation}</MathRenderer>
+                          </p>
                         </div>
                       </div>
                     );
