@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { MathRenderer } from "../../components/MathRenderer";
 import { useWorksheetPDF } from "../../hooks/usePDF";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "../../lib/firebase";
 
 interface Problem {
   id: string;
@@ -107,6 +109,22 @@ export default function GenerateProblems() {
       
       if (data.success && data.problems) {
         setGeneratedProblems(data.problems);
+        
+        // Auto-save worksheet to Firestore
+        const worksheet = {
+          title: `${topic} - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`,
+          description: `${topic}に関する${numQuestions}問の練習問題`,
+          subject: "general",
+          topic,
+          difficulty,
+          createdAt: new Date().toISOString(),
+          createdBy: user?.uid,
+          problems: data.problems,
+          status: "ready",
+        };
+
+        const worksheetRef = doc(db, 'worksheets', `worksheet_${Date.now()}`);
+        await setDoc(worksheetRef, worksheet);
       } else {
         throw new Error(data.error || "問題生成に失敗しました");
       }
@@ -255,9 +273,6 @@ export default function GenerateProblems() {
               ))}
               
               <div className="flex flex-wrap gap-4">
-                <button className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                  問題を保存
-                </button>
                 <button 
                   onClick={() => handleExportPDF(false)}
                   disabled={isPDFGenerating}
