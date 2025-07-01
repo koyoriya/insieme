@@ -50,10 +50,11 @@ jobs:
       - name: Deploy to Firebase Production
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           # Set functions environment variables for production
-          firebase functions:config:set gemini.api_key="${GEMINI_API_KEY}" --project insieme-463312 --token ${FIREBASE_TOKEN}
+          firebase functions:config:set gemini.api_key="${GEMINI_API_KEY}" --project ${FIREBASE_PROJECT_ID} --token ${FIREBASE_TOKEN}
           
           # Deploy hosting and functions to production
-          firebase deploy --project insieme-463312 --token ${FIREBASE_TOKEN}
+          firebase deploy --project ${FIREBASE_PROJECT_ID} --token ${FIREBASE_TOKEN}

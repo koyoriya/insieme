@@ -116,6 +116,8 @@ GitHub リポジトリの **Settings > Secrets and variables > Actions** で以�
 | Secret名 | 説明 | 取得方法 |
 |----------|------|----------|
 | `FIREBASE_TOKEN` | Firebase CLI認証トークン | `firebase login:ci` |
+| `FIREBASE_PROJECT_ID` | 本番用FirebaseプロジェクトID | `insieme-463312` |
+| `FIREBASE_PROJECT_ID_DEV` | 開発用FirebaseプロジェクトID | `insieme-dev-d7459` |
 | `GEMINI_API_KEY` | 本番用 Gemini API キー | Google AI Studio |
 | `GEMINI_API_KEY_DEV` | 開発用 Gemini API キー | Google AI Studio |
 
@@ -215,12 +217,12 @@ firebase deploy --dry-run
 
 ```bash
 # 本番環境に設定
-firebase functions:config:set gemini.api_key="YOUR_PRODUCTION_API_KEY" --project insieme-463312
+firebase functions:config:set gemini.api_key="YOUR_PRODUCTION_API_KEY" --project $FIREBASE_PROJECT_ID
 
 # 開発環境に設定
-firebase functions:config:set gemini.api_key="YOUR_DEV_API_KEY" --project insieme-dev-d7459
+firebase functions:config:set gemini.api_key="YOUR_DEV_API_KEY" --project $FIREBASE_PROJECT_ID_DEV
 
-# 設定確認
+# 設定確認（プロジェクトIDを実際の値に置き換えて実行）
 firebase functions:config:get --project insieme-463312
 firebase functions:config:get --project insieme-dev-d7459
 

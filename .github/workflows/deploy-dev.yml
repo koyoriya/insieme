@@ -50,10 +50,11 @@ jobs:
       - name: Deploy to Firebase Dev Environment
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+          FIREBASE_PROJECT_ID_DEV: ${{ secrets.FIREBASE_PROJECT_ID_DEV }}
           GEMINI_API_KEY_DEV: ${{ secrets.GEMINI_API_KEY_DEV }}
         run: |
           # Set functions environment variables for dev
-          firebase functions:config:set gemini.api_key="${GEMINI_API_KEY_DEV}" --project insieme-dev-d7459 --token ${FIREBASE_TOKEN}
+          firebase functions:config:set gemini.api_key="${GEMINI_API_KEY_DEV}" --project ${FIREBASE_PROJECT_ID_DEV} --token ${FIREBASE_TOKEN}
           
           # Deploy hosting and functions to dev
-          firebase deploy --project insieme-dev-d7459 --token ${FIREBASE_TOKEN}
+          firebase deploy --project ${FIREBASE_PROJECT_ID_DEV} --token ${FIREBASE_TOKEN}
