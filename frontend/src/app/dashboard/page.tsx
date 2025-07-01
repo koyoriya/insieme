@@ -8,8 +8,6 @@ import Link from "next/link";
 import { useWorksheets } from "../../hooks/useWorksheets";
 import { useWorksheetSubmissions } from "../../hooks/useWorksheetSubmissions";
 import { WorksheetStatus, Worksheet, WorksheetSubmission } from "../../types";
-import { doc, setDoc, deleteDoc } from "firebase/firestore";
-import { db } from "../../lib/firebase";
 
 // WorksheetItem component for displaying individual worksheets
 function WorksheetItem({ 
@@ -99,23 +97,10 @@ export default function Dashboard() {
     
     setIsGenerating(true);
     
-    // Create temporary worksheet with 'creating' status
     const tempWorksheetId = `temp_${Date.now()}`;
-    const tempWorksheet = {
-      title: `${topic} - 問題作成中...`,
-      description: `${topic}に関する${numQuestions}問の練習問題`,
-      subject: "general",
-      topic,
-      difficulty,
-      createdAt: new Date().toISOString(),
-      createdBy: user.uid,
-      problems: [],
-      status: 'creating' as WorksheetStatus,
-    };
     
     try {
       // Save temporary worksheet
-      await setDoc(doc(db, 'worksheets', tempWorksheetId), tempWorksheet);
       
       const requestBody = {
         subject: "general",
@@ -136,13 +121,6 @@ export default function Dashboard() {
       });
 
       if (!response.ok) {
-        // Update worksheet status to error
-        await setDoc(doc(db, 'worksheets', tempWorksheetId), {
-          ...tempWorksheet,
-          status: 'error' as WorksheetStatus,
-          title: `${topic} - 作成エラー`,
-        });
-        
         const errorText = await response.text();
         console.error(`HTTP error! status: ${response.status}, response:`, errorText);
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -151,41 +129,13 @@ export default function Dashboard() {
       const data = await response.json();
       console.log("Function response:", data);
       
-      if (data.success && data.worksheet) {
-        // Always delete temporary worksheet after successful generation
-        // This handles both cases: updated temp worksheet and newly created worksheet
-        try {
-          await deleteDoc(doc(db, 'worksheets', tempWorksheetId));
-          console.log("Deleted temporary worksheet:", tempWorksheetId);
-        } catch (deleteError) {
-          console.warn("Failed to delete temporary worksheet (may already be updated):", deleteError);
-        }
-        alert(`${data.count}問のワークシートが生成されました！`);
-      } else {
-        // Update worksheet status to error
-        await setDoc(doc(db, 'worksheets', tempWorksheetId), {
-          ...tempWorksheet,
-          status: 'error' as WorksheetStatus,
-          title: `${topic} - 作成エラー`,
-        });
-        
+      if (!(data.success && data.worksheet)) {
         console.error("Function error:", data);
         throw new Error(data.error || "ワークシート生成に失敗しました");
       }
     } catch (error) {
       console.error("Problem generation failed:", error);
-      
-      // Update worksheet status to error if it wasn't already updated
-      try {
-        await setDoc(doc(db, 'worksheets', tempWorksheetId), {
-          ...tempWorksheet,
-          status: 'error' as WorksheetStatus,
-          title: `${topic} - 作成エラー`,
-        });
-      } catch (updateError) {
-        console.error("Failed to update worksheet status:", updateError);
-      }
-      
+  
       alert("問題生成に失敗しました。もう一度お試しください。");
     } finally {
       setIsGenerating(false);
