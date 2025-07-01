@@ -186,17 +186,7 @@ function createPDFElement(worksheet: WorksheetPDFData, options: PDFOptions): HTM
       problemDiv.appendChild(optionsDiv);
     }
 
-    // Answer space for non-multiple choice
-    if (!problem.options || problem.options.length === 0) {
-      const answerSpace = document.createElement('div');
-      answerSpace.style.cssText = `
-        margin: 15px 0 15px 20px;
-        min-height: 60px;
-        border: 1px solid #ddd;
-        background: #f9f9f9;
-      `;
-      problemDiv.appendChild(answerSpace);
-    }
+    // No answer space needed for PDF export - users will write on paper
 
     // Answers and explanations (if enabled)
     if (options.includeAnswers) {
