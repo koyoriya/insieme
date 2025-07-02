@@ -112,7 +112,7 @@ export default function Dashboard() {
         tempWorksheetId, // Pass temp worksheet ID to update it
       };
       
-      const response = await fetch("https://generateproblems-ixkypuxz6a-uc.a.run.app", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL}/generateProblems`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

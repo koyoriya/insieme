@@ -97,9 +97,33 @@ export const api = onRequest(async (request, response) => {
 
 // Generate problems using Gemini AI
 export const generateProblems = onRequest({
-  cors: true,
   invoker: "public"
 }, async (request, response) => {
+  // Set CORS headers for all requests
+  const allowedOrigins = ["http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3000"];
+  const origin = request.headers.origin as string;
+  
+  if (allowedOrigins.includes(origin)) {
+    response.set("Access-Control-Allow-Origin", origin);
+  } else {
+    response.set("Access-Control-Allow-Origin", "http://localhost:3001");
+  }
+  
+  response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
+  response.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  response.set("Access-Control-Max-Age", "3600");
+  response.set("Access-Control-Allow-Credentials", "false");
+
+  // Handle preflight requests
+  if (request.method === "OPTIONS") {
+    logger.info("CORS preflight request received", {
+      origin: request.headers.origin,
+      method: request.method,
+      headers: request.headers
+    });
+    response.status(204).send("");
+    return;
+  }
   try {
     logger.info("generateProblems called", {
       method: request.method,
@@ -240,13 +264,30 @@ JSON形式で以下の構造で出力してください：
     // Save worksheet to Firestore
     let worksheetId: string;
     if (tempWorksheetId) {
-      // Update existing temporary worksheet
-      logger.info("Updating existing temporary worksheet", {tempWorksheetId});
-      await db.collection("worksheets").doc(tempWorksheetId).update({
-        ...worksheet,
-        status: "ready",
-      });
-      worksheetId = tempWorksheetId;
+      try {
+        // Check if temporary worksheet exists before updating
+        const tempDoc = await db.collection("worksheets").doc(tempWorksheetId).get();
+        if (tempDoc.exists) {
+          // Update existing temporary worksheet
+          logger.info("Updating existing temporary worksheet", {tempWorksheetId});
+          await db.collection("worksheets").doc(tempWorksheetId).update({
+            ...worksheet,
+            status: "ready",
+          });
+          worksheetId = tempWorksheetId;
+        } else {
+          // Temporary worksheet doesn't exist, create new one with the provided ID
+          logger.info("Temporary worksheet not found, creating new worksheet with provided ID", {tempWorksheetId});
+          await db.collection("worksheets").doc(tempWorksheetId).set(worksheet);
+          worksheetId = tempWorksheetId;
+        }
+      } catch (error) {
+        // If any error occurs with temp worksheet, create a new one
+        logger.warn("Error handling temporary worksheet, creating new worksheet", {tempWorksheetId, error});
+        const worksheetRef = db.collection("worksheets").doc();
+        await worksheetRef.set(worksheet);
+        worksheetId = worksheetRef.id;
+      }
     } else {
       // Create new worksheet (fallback)
       logger.info("Creating new worksheet");

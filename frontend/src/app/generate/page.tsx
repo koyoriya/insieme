@@ -90,7 +90,7 @@ export default function GenerateProblems() {
       
       console.log("Sending request:", requestBody);
       
-      const response = await fetch("https://generateproblems-ixkypuxz6a-uc.a.run.app", {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL}/generateProblems`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

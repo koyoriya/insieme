@@ -1,4 +1,4 @@
-.PHONY: help setup-dev setup-firebase install-frontend test-frontend dev-frontend dev-functions clean
+.PHONY: help setup-dev setup-firebase install-frontend test-frontend dev-frontend dev-functions clean dev-local test-local-functions stop-local
 
 # Default project settings
 PROJECT_ID ?= insieme-app
@@ -69,3 +69,29 @@ check-firebase: ## Check if firebase CLI is installed
 
 validate-env: check-firebase ## Validate required tools are installed
 	@echo "✅ Environment validation complete!"
+
+## Local Development Environment (Firebase Emulator)
+dev-local: ## Start complete local development environment with Firebase Emulators
+	@echo "🚀 Starting Local Development Environment with Firebase Emulators..."
+	@chmod +x scripts/start-local-dev.sh
+	./scripts/start-local-dev.sh
+
+stop-local: ## Stop local development environment
+	@echo "🛑 Stopping Local Development Environment..."
+	@chmod +x scripts/stop-local-dev.sh
+	./scripts/stop-local-dev.sh
+
+test-local-functions: ## Test Firebase Functions in local emulator
+	@echo "🧪 Testing Local Firebase Functions..."
+	@chmod +x scripts/test-local-functions.sh
+	./scripts/test-local-functions.sh
+
+setup-local: install-frontend ## Setup local emulator environment
+	@echo "⚙️ Setting up local emulator environment..."
+	@if [ ! -d "functions/node_modules" ]; then \
+		echo "📦 Installing Functions dependencies..."; \
+		cd functions && npm install; \
+	fi
+	@cp frontend/.env.emulator frontend/.env.local
+	@echo "✅ Local environment setup complete!"
+	@echo "🚀 Run 'make dev-local' to start the complete local environment"
