@@ -90,7 +90,12 @@ export default function GenerateProblems() {
       
       console.log("Sending request:", requestBody);
       
-      const response = await fetch("https://generateproblems-ixkypuxz6a-uc.a.run.app", {
+      const functionsBaseUrl = process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL;
+      if (!functionsBaseUrl) {
+        throw new Error('NEXT_PUBLIC_FUNCTIONS_BASE_URL environment variable is not configured');
+      }
+      
+      const response = await fetch(`${functionsBaseUrl}/generateProblems`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

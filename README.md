@@ -69,6 +69,9 @@ make setup-firebase      # Firebaseの自動セットアップ
 make test               # 全テストの実行
 make dev-frontend       # フロントエンド開発サーバー起動
 make dev-functions      # Firebase Functions開発サーバー起動
+make dev-local          # 🧪 完全ローカル環境起動（推奨）
+make test-local-functions # 🧪 ローカルFunctions テスト
+make stop-local         # 🛑 ローカル環境停止
 make clean              # クリーンアップ
 ```
 
@@ -193,7 +196,65 @@ firebase deploy
 
 ## 開発
 
-### 🏃‍♂️ 開発サーバー起動
+### 🧪 ローカル環境での検証（推奨）
+
+**Firebase Emulatorを使用した完全ローカル開発環境**
+
+#### ✨ ワンコマンド環境起動
+
+```bash
+# ローカル開発環境の自動セットアップ・起動
+make dev-local
+```
+
+このコマンドは以下を自動実行します：
+- 依存関係のインストール確認
+- Firebase Emulators 起動（Functions, Firestore, Auth, UI）
+- フロントエンド開発サーバー起動
+- 環境設定の自動切り替え
+
+**アクセス先:**
+- 🌐 **アプリケーション**: http://localhost:3001
+- 🔧 **Firebase Emulator UI**: http://127.0.0.1:4000
+- ⚡ **Functions**: http://127.0.0.1:5001
+- 🗄️ **Firestore**: http://127.0.0.1:8080
+- 🔐 **Auth**: http://127.0.0.1:9099
+
+#### 🛑 環境停止
+
+```bash
+# ローカル開発環境の停止
+make stop-local
+```
+
+#### 🧪 Functions テスト
+
+```bash
+# Firebase Functions の動作テスト（Gemini API 含む）
+make test-local-functions
+```
+
+**テスト内容:**
+- ✅ Health Check
+- ✅ Hello World Function  
+- ✅ Generate Problems (Gemini API)
+- ✅ Grade Answers (AI採点)
+
+#### 🌐 環境設定
+
+**ローカル環境用設定** (`.env.emulator`):
+```env
+# 完全ローカル開発用設定
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-insieme
+NEXT_PUBLIC_FUNCTIONS_BASE_URL=http://127.0.0.1:5001/demo-insieme/us-central1
+NEXT_PUBLIC_USE_FIREBASE_EMULATOR=true
+NEXT_PUBLIC_FIRESTORE_EMULATOR_HOST=127.0.0.1:8080
+NEXT_PUBLIC_AUTH_EMULATOR_HOST=127.0.0.1:9099
+```
+
+**本番環境への影響なし**: このローカル環境は完全に分離されており、本番データやサービスに一切影響しません。
+
+### 🏃‍♂️ 個別開発サーバー起動
 
 ```bash
 # フロントエンド（ポート3001）
@@ -202,7 +263,7 @@ make dev-frontend
 # Firebase Functions エミュレータ
 make dev-functions
 
-# 全体のエミュレータ起動（推奨）
+# 全体のエミュレータ起動
 firebase emulators:start
 ```
 
@@ -386,6 +447,26 @@ npm run build
 ```
 
 ### 🔧 開発環境エラー
+
+#### ローカルEmulator環境のトラブルシューティング
+
+```bash
+# 1. 環境の完全リセット
+make stop-local
+rm -rf frontend/.env.local
+make dev-local
+
+# 2. ポート競合の解決
+lsof -ti:3001,5001,8080,9099,4000 | xargs kill -9
+
+# 3. Functions テスト実行
+make test-local-functions
+
+# 4. Emulator UI でデータ確認
+open http://127.0.0.1:4000
+```
+
+#### 従来の開発環境エラー対応
 
 ```bash
 # Next.js キャッシュクリア
