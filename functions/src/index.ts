@@ -102,13 +102,12 @@ export const generateProblems = onRequest({
   // Set CORS headers for all requests
   const allowedOrigins = ["http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3000"];
   const origin = request.headers.origin as string;
-  
+
   if (allowedOrigins.includes(origin)) {
     response.set("Access-Control-Allow-Origin", origin);
   } else {
     response.set("Access-Control-Allow-Origin", "http://localhost:3001");
   }
-  
   response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
   response.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
   response.set("Access-Control-Max-Age", "3600");
