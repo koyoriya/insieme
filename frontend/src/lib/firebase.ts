@@ -32,7 +32,7 @@ if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
     try {
       connectFirestoreEmulator(db, '127.0.0.1', 8080);
       console.log('🔧 Connected to Firestore Emulator');
-    } catch (error) {
+    } catch {
       console.warn('Firestore Emulator already connected');
     }
   }
@@ -42,7 +42,7 @@ if (process.env.NEXT_PUBLIC_USE_FIREBASE_EMULATOR === 'true') {
     try {
       connectAuthEmulator(auth, 'http://127.0.0.1:9099');
       console.log('🔧 Connected to Auth Emulator');
-    } catch (error) {
+    } catch {
       console.warn('Auth Emulator already connected');
     }
   }
