@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import Link from "next/link";
-import { Worksheet, WorksheetSubmission, ProblemAnswer, WorksheetStatus } from "../../types";
+import { Worksheet, WorksheetSubmission, WorksheetStatus } from "../../types";
 import { MathRenderer } from "../../components/MathRenderer";
 import { useWorksheetPDF } from "../../hooks/usePDF";
 
@@ -407,7 +407,6 @@ function WorksheetPageContent() {
                     const userAnswer = submission.answers.find(a => a.problemId === problem.id);
                     const isCorrect = userAnswer?.isCorrect;
                     const partialScore = userAnswer?.partialScore;
-                    const maxScore = userAnswer?.maxScore || 1;
                     const feedback = userAnswer?.feedback;
                     const reasoning = userAnswer?.reasoning;
                     const confidence = userAnswer?.confidence;
