@@ -449,18 +449,18 @@ function WorksheetPageContent() {
                         
                         <div className="bg-blue-50 p-4 rounded-lg mb-4">
                           <h4 className="font-medium mb-2">あなたの回答:</h4>
-                          <p className="text-gray-800">
+                          <div className="text-gray-800">
                             <MathRenderer>{userAnswer?.answer || ''}</MathRenderer>
-                          </p>
+                          </div>
                         </div>
                         
                         {/* LLM Feedback */}
                         {feedback && (
                           <div className="bg-purple-50 p-4 rounded-lg mb-4">
                             <h4 className="font-medium mb-2 text-purple-800">AIからのフィードバック:</h4>
-                            <p className="text-purple-700">
+                            <div className="text-purple-700">
                               <MathRenderer>{feedback}</MathRenderer>
-                            </p>
+                            </div>
                           </div>
                         )}
                         
@@ -468,24 +468,24 @@ function WorksheetPageContent() {
                         {reasoning && (
                           <div className="bg-orange-50 p-4 rounded-lg mb-4">
                             <h4 className="font-medium mb-2 text-orange-800">採点理由:</h4>
-                            <p className="text-orange-700 text-sm">
+                            <div className="text-orange-700 text-sm">
                               <MathRenderer>{reasoning}</MathRenderer>
-                            </p>
+                            </div>
                           </div>
                         )}
                         
                         <div className="bg-gray-50 p-4 rounded-lg mb-4">
                           <h4 className="font-medium mb-2">模範解答:</h4>
-                          <p className="text-gray-800">
+                          <div className="text-gray-800">
                             <MathRenderer>{problem.correctAnswer}</MathRenderer>
-                          </p>
+                          </div>
                         </div>
                         
                         <div className="bg-green-50 p-4 rounded-lg">
                           <h4 className="font-medium mb-2">解説:</h4>
-                          <p className="text-gray-800">
+                          <div className="text-gray-800">
                             <MathRenderer>{problem.explanation}</MathRenderer>
-                          </p>
+                          </div>
                         </div>
                       </div>
                     );
