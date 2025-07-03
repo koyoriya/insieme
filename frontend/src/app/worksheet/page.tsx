@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import Link from "next/link";
-import { Worksheet, WorksheetSubmission, ProblemAnswer } from "../../types";
+import { Worksheet, WorksheetSubmission, ProblemAnswer, WorksheetStatus } from "../../types";
 import { MathRenderer } from "../../components/MathRenderer";
 import { useWorksheetPDF } from "../../hooks/usePDF";
 
@@ -154,6 +154,12 @@ function WorksheetPageContent() {
 
       const submissionId = `${worksheetId}_${user.uid}`;
       await setDoc(doc(db, 'worksheet_submissions', submissionId), submissionData);
+      
+      // Update worksheet status to 'submitted'
+      await setDoc(doc(db, 'worksheets', worksheetId), {
+        ...worksheet,
+        status: 'submitted' as WorksheetStatus
+      });
       
       setSubmission({ id: submissionId, ...submissionData });
       alert(`ワークシートを提出しました！\n得点: ${Math.round(totalScore)}/${worksheet.problems.length}\n正答率: ${percentageScore}%`);

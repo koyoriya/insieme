@@ -38,7 +38,11 @@ function WorksheetItem({
           <span>📊 {worksheet.difficulty === 'easy' ? '簡単' : worksheet.difficulty === 'medium' ? '普通' : '難しい'}</span>
           <span>📅 {new Date(worksheet.createdAt).toLocaleDateString('ja-JP')}</span>
           {submission && (
-            <span>✅ スコア: {submission.score}/{submission.totalProblems}</span>
+            <span>✅ スコア: {submission.score}/{submission.totalProblems}
+              {submission.percentageScore && (
+                <span> ({submission.percentageScore}%)</span>
+              )}
+            </span>
           )}
         </div>
       </div>
@@ -301,7 +305,15 @@ export default function Dashboard() {
                   <div className="space-y-4">
                     {worksheets.map((worksheet) => {
                       const submission = submissions[worksheet.id];
-                      const status: WorksheetStatus = worksheet.status || (submission ? 'submitted' : 'ready');
+                      // Determine the actual status based on worksheet status and submission
+                      let status: WorksheetStatus;
+                      if (worksheet.status === 'submitted' || submission) {
+                        status = 'submitted';
+                      } else if (worksheet.status) {
+                        status = worksheet.status;
+                      } else {
+                        status = 'ready';
+                      }
                       
                       const getStatusColor = (status: WorksheetStatus) => {
                         switch (status) {
