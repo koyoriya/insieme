@@ -112,7 +112,12 @@ export default function Dashboard() {
         tempWorksheetId, // Pass temp worksheet ID to update it
       };
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL}/generateProblems`, {
+      const functionsBaseUrl = process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL;
+      if (!functionsBaseUrl) {
+        throw new Error('NEXT_PUBLIC_FUNCTIONS_BASE_URL environment variable is not configured');
+      }
+      
+      const response = await fetch(`${functionsBaseUrl}/generateProblems`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
