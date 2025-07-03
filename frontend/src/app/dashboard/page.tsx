@@ -3,7 +3,6 @@
 import { useAuth } from "../../components/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useWorksheets } from "../../hooks/useWorksheets";
 import { useWorksheetSubmissions } from "../../hooks/useWorksheetSubmissions";
