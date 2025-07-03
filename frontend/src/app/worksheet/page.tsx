@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../../lib/firebase";
 import Link from "next/link";
-import { Worksheet, WorksheetSubmission, ProblemAnswer } from "../../types";
+import { Worksheet, WorksheetSubmission, WorksheetStatus } from "../../types";
 import { MathRenderer } from "../../components/MathRenderer";
 import { useWorksheetPDF } from "../../hooks/usePDF";
 
@@ -104,35 +104,68 @@ function WorksheetPageContent() {
 
     setIsSubmitting(true);
     try {
-      const problemAnswers: ProblemAnswer[] = worksheet.problems.map(problem => {
-        const answer = answers[problem.id];
-        return {
-          problemId: problem.id,
-          answer: answer.trim(),
-          isCorrect: problem.options ? 
-            answer.trim() === problem.correctAnswer.trim() : undefined
-        };
+      // Prepare answer data for LLM grading API
+      const answerData = worksheet.problems.map(problem => ({
+        problemId: problem.id,
+        answer: answers[problem.id].trim()
+      }));
+
+      // Call LLM grading API
+      const functionsBaseUrl = process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL;
+      const response = await fetch(`${functionsBaseUrl}/gradeAnswers`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          problems: worksheet.problems,
+          answers: answerData,
+          userId: user.uid,
+          worksheetId
+        })
       });
 
-      const score = problemAnswers.filter(answer => answer.isCorrect === true).length;
+      if (!response.ok) {
+        throw new Error(`Grading failed: ${response.status}`);
+      }
+
+      const gradingResult = await response.json();
+      
+      if (!gradingResult.success) {
+        throw new Error('Grading API returned error');
+      }
+
+      // Use LLM grading results
+      const gradedAnswers = gradingResult.gradedAnswers;
+      const totalScore = gradingResult.totalScore || 0;
+      const percentageScore = gradingResult.percentageScore || 0;
 
       const submissionData: Omit<WorksheetSubmission, 'id'> = {
         worksheetId,
         userId: user.uid,
-        answers: problemAnswers,
+        answers: gradedAnswers,
         submittedAt: new Date().toISOString(),
-        score,
-        totalProblems: worksheet.problems.length
+        score: Math.round(totalScore),
+        totalProblems: worksheet.problems.length,
+        partialScore: gradingResult.partialScore,
+        percentageScore,
+        gradingMethod: 'llm-assisted'
       };
 
       const submissionId = `${worksheetId}_${user.uid}`;
       await setDoc(doc(db, 'worksheet_submissions', submissionId), submissionData);
       
+      // Update worksheet status to 'submitted'
+      await setDoc(doc(db, 'worksheets', worksheetId), {
+        ...worksheet,
+        status: 'submitted' as WorksheetStatus
+      });
+      
       setSubmission({ id: submissionId, ...submissionData });
-      alert(`ワークシートを提出しました！ 得点: ${score}/${worksheet.problems.length}`);
+      alert(`ワークシートを提出しました！\n得点: ${Math.round(totalScore)}/${worksheet.problems.length}\n正答率: ${percentageScore}%`);
     } catch (error) {
       console.error('Error submitting worksheet:', error);
-      alert('提出に失敗しました。もう一度お試しください。');
+      alert('提出に失敗しました。もう一度お試しください。\n' + (error instanceof Error ? error.message : ''));
     } finally {
       setIsSubmitting(false);
     }
@@ -342,13 +375,26 @@ function WorksheetPageContent() {
               <>
                 <div className="mb-6">
                   <div className={`p-4 rounded-lg border ${
-                    submission.score === submission.totalProblems ? 'bg-green-50 border-green-200' :
-                    submission.score! >= submission.totalProblems * 0.7 ? 'bg-yellow-50 border-yellow-200' :
+                    (submission.percentageScore || 0) >= 90 ? 'bg-green-50 border-green-200' :
+                    (submission.percentageScore || 0) >= 70 ? 'bg-yellow-50 border-yellow-200' :
                     'bg-red-50 border-red-200'
                   }`}>
                     <h3 className="font-semibold text-lg mb-2">
                       提出完了 - 得点: {submission.score}/{submission.totalProblems}
+                      {submission.percentageScore !== undefined && (
+                        <span className="ml-2 text-sm">({submission.percentageScore}%)</span>
+                      )}
                     </h3>
+                    {submission.partialScore !== undefined && submission.partialScore !== submission.score && (
+                      <p className="text-sm mb-1">
+                        部分点込み: {submission.partialScore.toFixed(1)}点
+                      </p>
+                    )}
+                    {submission.gradingMethod && (
+                      <p className="text-xs text-gray-600 mb-1">
+                        採点方法: {submission.gradingMethod === 'llm-assisted' ? 'AI支援採点' : '基本採点'}
+                      </p>
+                    )}
                     <p className="text-sm">
                       提出日時: {new Date(submission.submittedAt).toLocaleString('ja-JP')}
                     </p>
@@ -360,6 +406,10 @@ function WorksheetPageContent() {
                   {worksheet.problems.map((problem, index) => {
                     const userAnswer = submission.answers.find(a => a.problemId === problem.id);
                     const isCorrect = userAnswer?.isCorrect;
+                    const partialScore = userAnswer?.partialScore;
+                    const feedback = userAnswer?.feedback;
+                    const reasoning = userAnswer?.reasoning;
+                    const confidence = userAnswer?.confidence;
                     
                     return (
                       <div key={problem.id} className="border border-gray-200 rounded-lg p-6">
@@ -372,11 +422,28 @@ function WorksheetPageContent() {
                           }`}>
                             {problem.options ? '選択問題' : '記述問題'}
                           </span>
-                          {isCorrect !== undefined && (
+                          
+                          {/* Score Display */}
+                          {partialScore !== undefined ? (
+                            <span className={`inline-block ml-2 px-2 py-1 text-xs rounded ${
+                              partialScore >= 0.7 ? 'bg-green-100 text-green-800' :
+                              partialScore >= 0.4 ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-red-100 text-red-800'
+                            }`}>
+                              {Math.round(partialScore * 100)}%
+                            </span>
+                          ) : isCorrect !== undefined ? (
                             <span className={`inline-block ml-2 px-2 py-1 text-xs rounded ${
                               isCorrect ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                             }`}>
                               {isCorrect ? '✓ 正解' : '× 不正解'}
+                            </span>
+                          ) : null}
+                          
+                          {/* Confidence Display */}
+                          {confidence !== undefined && (
+                            <span className="inline-block ml-2 px-2 py-1 text-xs rounded bg-gray-100 text-gray-700">
+                              信頼度: {Math.round(confidence * 100)}%
                             </span>
                           )}
                         </div>
@@ -387,23 +454,43 @@ function WorksheetPageContent() {
                         
                         <div className="bg-blue-50 p-4 rounded-lg mb-4">
                           <h4 className="font-medium mb-2">あなたの回答:</h4>
-                          <p className="text-gray-800">
+                          <div className="text-gray-800">
                             <MathRenderer>{userAnswer?.answer || ''}</MathRenderer>
-                          </p>
+                          </div>
                         </div>
+                        
+                        {/* LLM Feedback */}
+                        {feedback && (
+                          <div className="bg-purple-50 p-4 rounded-lg mb-4">
+                            <h4 className="font-medium mb-2 text-purple-800">AIからのフィードバック:</h4>
+                            <div className="text-purple-700">
+                              <MathRenderer>{feedback}</MathRenderer>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* LLM Reasoning */}
+                        {reasoning && (
+                          <div className="bg-orange-50 p-4 rounded-lg mb-4">
+                            <h4 className="font-medium mb-2 text-orange-800">採点理由:</h4>
+                            <div className="text-orange-700 text-sm">
+                              <MathRenderer>{reasoning}</MathRenderer>
+                            </div>
+                          </div>
+                        )}
                         
                         <div className="bg-gray-50 p-4 rounded-lg mb-4">
                           <h4 className="font-medium mb-2">模範解答:</h4>
-                          <p className="text-gray-800">
+                          <div className="text-gray-800">
                             <MathRenderer>{problem.correctAnswer}</MathRenderer>
-                          </p>
+                          </div>
                         </div>
                         
                         <div className="bg-green-50 p-4 rounded-lg">
                           <h4 className="font-medium mb-2">解説:</h4>
-                          <p className="text-gray-800">
+                          <div className="text-gray-800">
                             <MathRenderer>{problem.explanation}</MathRenderer>
-                          </p>
+                          </div>
                         </div>
                       </div>
                     );
