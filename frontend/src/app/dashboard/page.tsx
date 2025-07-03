@@ -3,7 +3,6 @@
 import { useAuth } from "../../components/AuthProvider";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import Link from "next/link";
 import { useWorksheets } from "../../hooks/useWorksheets";
 import { useWorksheetSubmissions } from "../../hooks/useWorksheetSubmissions";
@@ -157,13 +156,9 @@ export default function Dashboard() {
         <div className="px-4 py-6 sm:px-0">
           <div className="border-4 border-dashed border-gray-200 rounded-lg p-8">
             <div className="flex justify-between items-start mb-6">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                  Welcome, {user.displayName || 'User'}!
-                </h1>
-                <p className="text-gray-600">
-                  問題作成&添削システム
-                </p>
+              <div className="flex items-center">
+                <h1 className="text-2xl font-bold text-gray-900">📚 Insieme</h1>
+                <span className="ml-2 text-sm text-gray-500">学習支援システム</span>
               </div>
               <button
                 onClick={handleSignOut}
@@ -244,42 +239,6 @@ export default function Dashboard() {
                       "問題を生成する"
                     )}
                   </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 統計情報 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">📊 統計情報</h3>
-                <div className="space-y-2">
-                  <p><strong>総ワークシート数:</strong> {worksheets.length}個</p>
-                  <p><strong>総問題数:</strong> {worksheets.reduce((total, ws) => total + ws.problems.length, 0)}問</p>
-                  <p><strong>今月作成:</strong> {worksheets.filter(ws => {
-                    const createdDate = new Date(ws.createdAt);
-                    const now = new Date();
-                    return createdDate.getMonth() === now.getMonth() && 
-                           createdDate.getFullYear() === now.getFullYear();
-                  }).length}個</p>
-                </div>
-              </div>
-
-              <div className="bg-white p-6 rounded-lg shadow">
-                <h3 className="text-lg font-semibold mb-4">👤 ユーザー情報</h3>
-                <div className="space-y-2 text-sm">
-                  <p><strong>名前:</strong> {user.displayName || 'Not provided'}</p>
-                  <p><strong>メール:</strong> {user.email}</p>
-                  {user.photoURL && (
-                    <div className="mt-4">
-                      <Image 
-                        src={user.photoURL} 
-                        alt="Profile" 
-                        width={48}
-                        height={48}
-                        className="w-12 h-12 rounded-full"
-                      />
-                    </div>
-                  )}
                 </div>
               </div>
             </div>
