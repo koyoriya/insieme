@@ -383,7 +383,7 @@ export const gradeAnswers = onRequest({
 
     for (const problem of problems) {
       const userAnswer = answers.find((ans: any) => ans.problemId === problem.id);
-      
+
       if (!userAnswer) {
         // No answer provided
         gradedAnswers.push({
@@ -477,7 +477,7 @@ JSON形式で以下の構造で出力してください：
           originalResponse: responseText.substring(0, 500),
           error: parseError
         });
-        
+
         // Fallback: basic text similarity check
         const similarity = userAnswer.answer.toLowerCase().includes(problem.correctAnswer.toLowerCase()) ? 0.7 : 0.1;
         gradingResult = {
