@@ -3,6 +3,7 @@ import * as logger from "firebase-functions/logger";
 import {initializeApp} from "firebase-admin/app";
 import {getFirestore} from "firebase-admin/firestore";
 import {GoogleGenerativeAI} from "@google/generative-ai";
+import {GoogleAIFileManager} from "@google/generative-ai/server";
 import * as cors from "cors";
 
 // Initialize Firebase Admin
@@ -12,8 +13,12 @@ const db = getFirestore();
 // Initialize Gemini AI
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
+// Initialize file manager for PDF uploads
+const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY || "");
+
 // Initialize CORS
 const corsHandler = cors({origin: true});
+
 
 // Hello World function
 export const helloWorld = onRequest((request, response) => {
@@ -95,327 +100,321 @@ export const api = onRequest(async (request, response) => {
   });
 });
 
-// Generate problems using Gemini AI
-export const generateProblems = onRequest({
-  invoker: "public"
-}, async (request, response) => {
-  // Set CORS headers for all requests
-  const allowedOrigins = ["http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3000"];
-  const origin = request.headers.origin as string;
-
-  if (allowedOrigins.includes(origin)) {
-    response.set("Access-Control-Allow-Origin", origin);
+// ✅ プロンプト生成ロジックの切り出し
+function buildPrompt(options: {
+  numQuestions: number;
+  difficulty: string;
+  topic?: string;
+  pdfIncluded: boolean;
+}): string {
+  const map: {[key: string]: string} = {easy: "簡単", medium: "普通", hard: "難しい"};
+  const diff = map[options.difficulty] || "普通";
+  let p = `あなたは教育問題作成の専門家です。以下の条件に従って学習問題を${options.numQuestions}問作成してください。\n\n【条件】\n- 難易度: ${diff}\n`;
+  if (options.pdfIncluded) {
+    p += "- 資料: 提供されたPDFファイルの内容\n";
+    if (options.topic) p += `- 追加指示: ${options.topic}\n`;
+    p += "【指示】\nPDFの内容を理解し、全ての情報を活用して問題を作成してください。\n";
   } else {
-    response.set("Access-Control-Allow-Origin", "http://localhost:3001");
+    p += `- トピック: ${options.topic}\n`;
   }
-  response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  response.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  response.set("Access-Control-Max-Age", "3600");
-  response.set("Access-Control-Allow-Credentials", "false");
-
-  // Handle preflight requests
-  if (request.method === "OPTIONS") {
-    logger.info("CORS preflight request received", {
-      origin: request.headers.origin,
-      method: request.method,
-      headers: request.headers
-    });
-    response.status(204).send("");
-    return;
-  }
-  try {
-    logger.info("generateProblems called", {
-      method: request.method,
-      contentType: request.headers["content-type"],
-      rawBody: request.rawBody?.toString(),
-      body: request.body
-    });
-
-    if (request.method !== "POST") {
-      response.status(405).json({error: "Method not allowed"});
-      return;
-    }
-
-    if (!request.body) {
-      response.status(400).json({error: "Request body is required"});
-      return;
-    }
-
-    const {
-      subject,
-      difficulty,
-      topic,
-      numQuestions,
-      userId,
-      tempWorksheetId,
-    } = request.body;
-
-    logger.info("Parsed request body", {subject, difficulty, topic, numQuestions, userId, tempWorksheetId});
-
-    if (!subject || !topic || !numQuestions || !userId) {
-      response.status(400).json({error: "Missing required fields"});
-      return;
-    }
-
-    if (!process.env.GEMINI_API_KEY) {
-      response.status(500).json({error: "Gemini API key not configured"});
-      return;
-    }
-
-    const model = genAI.getGenerativeModel({model: "gemini-2.0-flash-exp"});
-    logger.info("Gemini model initialized");
-
-    // Create prompt for problem generation
-    const difficultyMap: {[key: string]: string} = {
-      easy: "簡単",
-      medium: "普通",
-      hard: "難しい",
-    };
-    const difficultyText = difficultyMap[difficulty] || "普通";
-
-    const prompt = `
-あなたは教育問題作成の専門家です。以下の条件に従って学習問題を${numQuestions}問作成してください。
-
-【条件】
-- 難易度: ${difficultyText}
-- トピック: ${topic}
-
-【自動判定してください】
-- トピックに最適な科目を自動判定
-- トピックに適した問題形式（選択問題、記述問題、論述問題）を自動判定し、バランスよく組み合わせ
-
-【出力形式】
-JSON形式で以下の構造で出力してください：
-
+  p += `\n【出力形式】\nJSON形式で次の構造を純粋に返してください。
 {
   "problems": [
     {
-      "question": "問題文",
-      "options": ["選択肢A", "選択肢B", "選択肢C", "選択肢D"] または null（記述・論述問題の場合）,
-      "correctAnswer": "正答",
-      "explanation": "解説文",
-      "type": "multiple-choice" または "short-answer" または "essay"
+      "question": string,
+      "options": string[] | null,
+      "correctAnswer": string,
+      "explanation": string,
+      "type": "multiple-choice" | "short-answer" | "essay"
     }
   ]
 }
-
-【注意事項】
-- 問題は教育的価値があり、適切な難易度であること
-- 解説は理解しやすく、学習に役立つこと
-- 選択問題の場合、1つの正答と3つの適切な誤答を作成すること
-- 記述・論述問題の場合は、模範解答を提示すること
-- トピックに最も適した問題形式を選択し、多様性を持たせること
-- 日本語で出力すること
-- JSONフォーマット以外の文字は一切含めないこと
-- マークダウンのコードブロックは使用しないこと
-- 純粋なJSONのみを返すこと
+- 選択肢問題は正答＋誤答3つ
+- 記述・論述問題は模範解答付き
+- 日本語
+- コードブロック禁止、純JSONのみ
 `;
+  return p;
+}
 
-    logger.info("Calling Gemini API");
-    const result = await model.generateContent(prompt);
-    let responseText = result.response.text();
-    logger.info("Gemini API response received", {responseLength: responseText.length});
-
-    // Remove markdown code blocks if present
-    responseText = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    logger.info("Cleaned response text", {cleanedText: responseText.substring(0, 200) + "..."});
-
-    let problemData;
-    try {
-      problemData = JSON.parse(responseText);
-    } catch (parseError) {
-      logger.error("Failed to parse Gemini response as JSON", {
-        originalResponse: responseText.substring(0, 500),
-        error: parseError,
-      });
-      response.status(500).json({
-        error: "Failed to parse AI response",
-        details: "Response was not valid JSON",
-      });
-      return;
-    }
-
-    if (!problemData.problems || !Array.isArray(problemData.problems)) {
-      response.status(500).json({
-        error: "Invalid response structure from AI",
-      });
-      return;
-    }
-
-    // Create worksheet with problems
-    const problems = problemData.problems.map((problem: any, index: number) => ({
-      ...problem,
-      id: `problem_${Date.now()}_${index}`,
-    }));
-
-    const worksheet = {
-      title: `${topic} - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`,
-      description: `${topic}に関する${numQuestions}問の練習問題`,
-      subject,
-      topic,
-      difficulty,
-      createdAt: new Date().toISOString(),
-      createdBy: userId,
-      problems,
-      status: "ready",
-    };
-
-    // Save worksheet to Firestore
-    let worksheetId: string;
-    if (tempWorksheetId) {
+// Generate problems using Gemini AI
+export const generateProblems = onRequest({
+  invoker: "public",
+  timeoutSeconds: 300
+}, async (request, response): Promise<void> => {
+  return new Promise((resolve) => {
+    corsHandler(request, response, async () => {
       try {
-        // Check if temporary worksheet exists before updating
-        const tempDoc = await db.collection("worksheets").doc(tempWorksheetId).get();
-        if (tempDoc.exists) {
-          // Update existing temporary worksheet
-          logger.info("Updating existing temporary worksheet", {tempWorksheetId});
-          await db.collection("worksheets").doc(tempWorksheetId).update({
-            ...worksheet,
-            status: "ready",
-          });
-          worksheetId = tempWorksheetId;
-        } else {
-          // Temporary worksheet doesn't exist, create new one with the provided ID
-          logger.info("Temporary worksheet not found, creating new worksheet with provided ID", {tempWorksheetId});
-          await db.collection("worksheets").doc(tempWorksheetId).set(worksheet);
-          worksheetId = tempWorksheetId;
+        logger.info("generateProblems called", {
+          method: request.method,
+          contentType: request.headers["content-type"],
+          rawBody: request.rawBody?.toString(),
+          body: request.body
+        });
+
+        if (request.method !== "POST") {
+          response.status(405).json({error: "Method not allowed"});
+          return;
         }
+
+        if (!request.body) {
+          response.status(400).json({error: "Request body is required"});
+          return;
+        }
+
+        const {
+          subject,
+          difficulty,
+          topic,
+          numQuestions,
+          userId,
+          tempWorksheetId,
+          pdfData,
+        } = request.body || {};
+
+        if (!subject || !numQuestions || !userId) {
+          response.status(400).json({error: "subject, numQuestions, userId は必須です"});
+          return;
+        }
+        if (!topic && !pdfData) {
+          response.status(400).json({error: "topic または pdfData のどちらかが必要です"});
+          return;
+        }
+        if (!process.env.GEMINI_API_KEY) {
+          response.status(500).json({error: "Gemini API key 未設定です"});
+          return;
+        }
+
+        let fileId: string | null = null;
+        if (pdfData) {
+          try {
+            const base64 = pdfData.split(",")[1];
+            if (!base64) throw new Error("base64抽出失敗");
+            const buffer = Buffer.from(base64, "base64");
+            const upload = await fileManager.uploadFile(buffer, {
+              mimeType: "application/pdf",
+              displayName: "uploaded_document.pdf"
+            });
+            fileId = upload.file.name;
+            logger.info("PDFアップロード成功", {fileId});
+          } catch (e) {
+            logger.error("PDFアップロード失敗", e);
+            response.status(500).json({error: "PDF処理に失敗しました"});
+            return;
+          }
+        }
+
+        const prompt = buildPrompt({
+          numQuestions,
+          difficulty,
+          topic,
+          pdfIncluded: !!fileId,
+        });
+
+        let responseText: string;
+        if (fileId) {
+          const model = genAI.getGenerativeModel({model: "gemini-2.5-pro"});
+          const result = await model.generateContent([
+            {
+              fileData: {
+                mimeType: "application/pdf",
+                fileUri: `https://generativelanguage.googleapis.com/v1beta/${fileId}`
+              }
+            },
+            {text: prompt}
+          ]);
+          responseText = result.response.text();
+        } else {
+          const model = genAI.getGenerativeModel({model: "gemini-2.5-pro"});
+          responseText = (await model.generateContent(prompt)).response.text();
+        }
+
+        responseText = responseText.replace(/```json\n?|```/g, "").trim();
+        let problemData;
+        try {
+          problemData = JSON.parse(responseText);
+        } catch {
+          logger.error("JSON解析失敗", responseText.substring(0,200));
+          response.status(500).json({error: "AI応答がJSONではありません"});
+          return;
+        }
+
+        if (!Array.isArray(problemData.problems)) {
+          response.status(500).json({error: "problems配列がありません"});
+          return;
+        }
+
+        // Create worksheet with problems
+        const problems = problemData.problems.map((problem: any, index: number) => ({
+          ...problem,
+          id: `problem_${Date.now()}_${index}`,
+        }));
+
+        // Create worksheet title and description
+        let title: string;
+        let description: string;
+
+        if (fileId && topic) {
+          title = `PDF資料 + ${topic} - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`;
+          description = `PDFファイルの内容と「${topic}」に関する${numQuestions}問の練習問題`;
+        } else if (fileId) {
+          title = `PDF資料 - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`;
+          description = `PDFファイルの内容に基づく${numQuestions}問の練習問題`;
+        } else {
+          title = `${topic} - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`;
+          description = `${topic}に関する${numQuestions}問の練習問題`;
+        }
+
+        const worksheet = {
+          title,
+          description,
+          subject,
+          topic: topic || "PDF資料",
+          difficulty,
+          createdAt: new Date().toISOString(),
+          createdBy: userId,
+          problems,
+          status: "ready",
+          hasPDF: !!fileId,
+          pdfFileId: fileId,
+        };
+
+        // Save worksheet to Firestore
+        let worksheetId: string;
+        if (tempWorksheetId) {
+          try {
+            // Check if temporary worksheet exists before updating
+            const tempDoc = await db.collection("worksheets").doc(tempWorksheetId).get();
+            if (tempDoc.exists) {
+              // Update existing temporary worksheet
+              logger.info("Updating existing temporary worksheet", {tempWorksheetId});
+              await db.collection("worksheets").doc(tempWorksheetId).update({
+                ...worksheet,
+                status: "ready",
+              });
+              worksheetId = tempWorksheetId;
+            } else {
+              // Temporary worksheet doesn't exist, create new one with the provided ID
+              logger.info("Temporary worksheet not found, creating new worksheet with provided ID", {tempWorksheetId});
+              await db.collection("worksheets").doc(tempWorksheetId).set(worksheet);
+              worksheetId = tempWorksheetId;
+            }
+          } catch (error) {
+            // If any error occurs with temp worksheet, create a new one
+            logger.warn("Error handling temporary worksheet, creating new worksheet", {tempWorksheetId, error});
+            const worksheetRef = db.collection("worksheets").doc();
+            await worksheetRef.set(worksheet);
+            worksheetId = worksheetRef.id;
+          }
+        } else {
+          // Create new worksheet (fallback)
+          logger.info("Creating new worksheet");
+          const worksheetRef = db.collection("worksheets").doc();
+          await worksheetRef.set(worksheet);
+          worksheetId = worksheetRef.id;
+        }
+
+        // Return success response with worksheet data
+        response.json({
+          success: true,
+          worksheet: {id: worksheetId, ...worksheet},
+          count: problems.length,
+        });
+
       } catch (error) {
-        // If any error occurs with temp worksheet, create a new one
-        logger.warn("Error handling temporary worksheet, creating new worksheet", {tempWorksheetId, error});
-        const worksheetRef = db.collection("worksheets").doc();
-        await worksheetRef.set(worksheet);
-        worksheetId = worksheetRef.id;
+        logger.error("Problem generation failed", {
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        response.status(500).json({
+          error: error instanceof Error ? error.message : "Problem generation failed",
+        });
       }
-    } else {
-      // Create new worksheet (fallback)
-      logger.info("Creating new worksheet");
-      const worksheetRef = db.collection("worksheets").doc();
-      await worksheetRef.set(worksheet);
-      worksheetId = worksheetRef.id;
-    }
-
-    // Return success response with worksheet data
-    response.json({
-      success: true,
-      worksheet: {id: worksheetId, ...worksheet},
-      count: problems.length,
+      resolve(undefined);
     });
-
-  } catch (error) {
-    logger.error("Problem generation failed", {
-      error: error instanceof Error ? error.message : error,
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    response.status(500).json({
-      error: error instanceof Error ? error.message : "Problem generation failed",
-    });
-  }
+  });
 });
 
 // Grade answers using Gemini AI
 export const gradeAnswers = onRequest({
-  invoker: "public"
+  invoker: "public",
+  timeoutSeconds: 300
 }, async (request, response) => {
-  // Set CORS headers for all requests
-  const allowedOrigins = ["http://localhost:3001", "http://127.0.0.1:3001", "http://localhost:3000"];
-  const origin = request.headers.origin as string;
-
-  if (allowedOrigins.includes(origin)) {
-    response.set("Access-Control-Allow-Origin", origin);
-  } else {
-    response.set("Access-Control-Allow-Origin", "http://localhost:3001");
-  }
-
-  response.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  response.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  response.set("Access-Control-Max-Age", "3600");
-  response.set("Access-Control-Allow-Credentials", "false");
-
-  // Handle preflight requests
-  if (request.method === "OPTIONS") {
-    logger.info("CORS preflight request received for gradeAnswers", {
-      origin: request.headers.origin,
-      method: request.method,
-      headers: request.headers
-    });
-    response.status(204).send("");
-    return;
-  }
-
-  try {
-    logger.info("gradeAnswers called", {
-      method: request.method,
-      contentType: request.headers["content-type"],
-      body: request.body
-    });
-
-    if (request.method !== "POST") {
-      response.status(405).json({error: "Method not allowed"});
-      return;
-    }
-
-    if (!request.body) {
-      response.status(400).json({error: "Request body is required"});
-      return;
-    }
-
-    const {problems, answers, userId, worksheetId} = request.body;
-
-    logger.info("Parsed grading request", {problems: problems?.length, answers: answers?.length, userId, worksheetId});
-
-    if (!problems || !answers || !userId || !Array.isArray(problems) || !Array.isArray(answers)) {
-      response.status(400).json({error: "Missing required fields: problems, answers, userId"});
-      return;
-    }
-
-    if (!process.env.GEMINI_API_KEY) {
-      response.status(500).json({error: "Gemini API key not configured"});
-      return;
-    }
-
-    const model = genAI.getGenerativeModel({model: "gemini-2.0-flash-exp"});
-    logger.info("Gemini model initialized for grading");
-
-    // Grade each answer using LLM
-    const gradedAnswers = [];
-    let totalScore = 0;
-
-    for (const problem of problems) {
-      const userAnswer = answers.find((ans: any) => ans.problemId === problem.id);
-
-      if (!userAnswer) {
-        // No answer provided
-        gradedAnswers.push({
-          problemId: problem.id,
-          answer: "",
-          isCorrect: false,
-          partialScore: 0,
-          maxScore: 1,
-          feedback: "回答が提出されていません。",
-          confidence: 1.0
+  return new Promise((resolve) => {
+    corsHandler(request, response, async () => {
+      try {
+        logger.info("gradeAnswers called", {
+          method: request.method,
+          contentType: request.headers["content-type"],
+          body: request.body
         });
-        continue;
-      }
 
-      // Handle multiple choice questions with exact matching
-      if (problem.options && Array.isArray(problem.options)) {
-        const isCorrect = userAnswer.answer.trim() === problem.correctAnswer.trim();
-        gradedAnswers.push({
-          problemId: problem.id,
-          answer: userAnswer.answer,
-          isCorrect,
-          partialScore: isCorrect ? 1 : 0,
-          maxScore: 1,
-          feedback: isCorrect ? "正解です！" : `不正解です。正解は「${problem.correctAnswer}」です。`,
-          confidence: 1.0
-        });
-        if (isCorrect) totalScore += 1;
-        continue;
-      }
+        if (request.method !== "POST") {
+          response.status(405).json({error: "Method not allowed"});
+          return;
+        }
 
-      // Use LLM for open-ended questions (short answer, essay)
-      const gradingPrompt = `
+        if (!request.body) {
+          response.status(400).json({error: "Request body is required"});
+          return;
+        }
+
+        const {problems, answers, userId, worksheetId} = request.body;
+
+        logger.info("Parsed grading request", {problems: problems?.length, answers: answers?.length, userId, worksheetId});
+
+        if (!problems || !answers || !userId || !Array.isArray(problems) || !Array.isArray(answers)) {
+          response.status(400).json({error: "Missing required fields: problems, answers, userId"});
+          return;
+        }
+
+        if (!process.env.GEMINI_API_KEY) {
+          response.status(500).json({error: "Gemini API key not configured"});
+          return;
+        }
+
+        const model = genAI.getGenerativeModel({model: "gemini-2.5-pro"});
+        logger.info("Gemini 2.5 Pro model initialized for grading");
+
+        // Grade each answer using LLM
+        const gradedAnswers = [];
+        let totalScore = 0;
+
+        for (const problem of problems) {
+          const userAnswer = answers.find((ans: any) => ans.problemId === problem.id);
+
+          if (!userAnswer) {
+            // No answer provided
+            gradedAnswers.push({
+              problemId: problem.id,
+              answer: "",
+              isCorrect: false,
+              partialScore: 0,
+              maxScore: 1,
+              feedback: "回答が提出されていません。",
+              confidence: 1.0
+            });
+            continue;
+          }
+
+          // Handle multiple choice questions with exact matching
+          if (problem.options && Array.isArray(problem.options)) {
+            const isCorrect = userAnswer.answer.trim() === problem.correctAnswer.trim();
+            gradedAnswers.push({
+              problemId: problem.id,
+              answer: userAnswer.answer,
+              isCorrect,
+              partialScore: isCorrect ? 1 : 0,
+              maxScore: 1,
+              feedback: isCorrect ? "正解です！" : `不正解です。正解は「${problem.correctAnswer}」です。`,
+              confidence: 1.0
+            });
+            if (isCorrect) totalScore += 1;
+            continue;
+          }
+
+          // Use LLM for open-ended questions (short answer, essay)
+          const gradingPrompt = `
 あなたは教育分野の採点専門家です。以下の条件に従って学習者の回答を採点してください。
 
 【問題】
@@ -457,113 +456,116 @@ JSON形式で以下の構造で出力してください：
 - 純粋なJSONのみを返すこと
 `;
 
-      logger.info("Calling Gemini API for grading", {problemId: problem.id});
-      const result = await model.generateContent(gradingPrompt);
-      let responseText = result.response.text();
-      logger.info("Gemini grading response received", {
-        problemId: problem.id,
-        responseLength: responseText.length
-      });
+          logger.info("Calling Gemini API for grading", {problemId: problem.id});
+          const result = await model.generateContent(gradingPrompt);
+          let responseText = result.response.text();
+          logger.info("Gemini grading response received", {
+            problemId: problem.id,
+            responseLength: responseText.length
+          });
 
-      // Clean response
-      responseText = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          // Clean response
+          responseText = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
 
-      let gradingResult;
-      try {
-        gradingResult = JSON.parse(responseText);
-      } catch (parseError) {
-        logger.error("Failed to parse Gemini grading response", {
-          problemId: problem.id,
-          originalResponse: responseText.substring(0, 500),
-          error: parseError
-        });
+          let gradingResult;
+          try {
+            gradingResult = JSON.parse(responseText);
+          } catch (parseError) {
+            logger.error("Failed to parse Gemini grading response", {
+              problemId: problem.id,
+              originalResponse: responseText.substring(0, 500),
+              error: parseError
+            });
 
-        // Fallback: basic text similarity check
-        const similarity = userAnswer.answer.toLowerCase().includes(problem.correctAnswer.toLowerCase()) ? 0.7 : 0.1;
-        gradingResult = {
-          score: similarity,
-          feedback: "自動採点でエラーが発生しました。手動での確認をお勧めします。",
-          reasoning: "LLM応答の解析に失敗",
-          confidence: 0.3
+            // Fallback: basic text similarity check
+            const similarity = userAnswer.answer.toLowerCase().includes(problem.correctAnswer.toLowerCase()) ? 0.7 : 0.1;
+            gradingResult = {
+              score: similarity,
+              feedback: "自動採点でエラーが発生しました。手動での確認をお勧めします。",
+              reasoning: "LLM応答の解析に失敗",
+              confidence: 0.3
+            };
+          }
+
+          // Validate and normalize score
+          const score = Math.max(0, Math.min(1, gradingResult.score || 0));
+          const isCorrect = score >= 0.7; // Consider 70%+ as correct
+
+          gradedAnswers.push({
+            problemId: problem.id,
+            answer: userAnswer.answer,
+            isCorrect,
+            partialScore: score,
+            maxScore: 1,
+            feedback: gradingResult.feedback || "採点が完了しました。",
+            reasoning: gradingResult.reasoning || "",
+            confidence: gradingResult.confidence || 0.5
+          });
+
+          totalScore += score;
+        }
+
+        // Calculate final scores
+        const maxTotalScore = problems.length;
+        const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
+
+        // Create submission record
+        const submission = {
+          worksheetId: worksheetId || null,
+          userId,
+          answers: gradedAnswers,
+          score: Math.round(totalScore),
+          totalProblems: problems.length,
+          partialScore: totalScore,
+          percentageScore: Math.round(percentageScore),
+          submittedAt: new Date().toISOString(),
+          gradingMethod: "llm-assisted",
+          gradingVersion: "v1.0"
         };
-      }
 
-      // Validate and normalize score
-      const score = Math.max(0, Math.min(1, gradingResult.score || 0));
-      const isCorrect = score >= 0.7; // Consider 70%+ as correct
+        // Save to Firestore if worksheetId is provided
+        let submissionId = null;
+        if (worksheetId) {
+          try {
+            const submissionRef = await db.collection("worksheet_submissions").add(submission);
+            submissionId = submissionRef.id;
+            logger.info("Submission saved to Firestore", {submissionId, worksheetId, userId});
+          } catch (firestoreError) {
+            logger.error("Failed to save submission to Firestore", {
+              error: firestoreError,
+              worksheetId,
+              userId
+            });
+            // Continue without failing the entire request
+          }
+        }
 
-      gradedAnswers.push({
-        problemId: problem.id,
-        answer: userAnswer.answer,
-        isCorrect,
-        partialScore: score,
-        maxScore: 1,
-        feedback: gradingResult.feedback || "採点が完了しました。",
-        reasoning: gradingResult.reasoning || "",
-        confidence: gradingResult.confidence || 0.5
-      });
-
-      totalScore += score;
-    }
-
-    // Calculate final scores
-    const maxTotalScore = problems.length;
-    const percentageScore = maxTotalScore > 0 ? (totalScore / maxTotalScore) * 100 : 0;
-
-    // Create submission record
-    const submission = {
-      worksheetId: worksheetId || null,
-      userId,
-      answers: gradedAnswers,
-      score: Math.round(totalScore),
-      totalProblems: problems.length,
-      partialScore: totalScore,
-      percentageScore: Math.round(percentageScore),
-      submittedAt: new Date().toISOString(),
-      gradingMethod: "llm-assisted",
-      gradingVersion: "v1.0"
-    };
-
-    // Save to Firestore if worksheetId is provided
-    let submissionId = null;
-    if (worksheetId) {
-      try {
-        const submissionRef = await db.collection("worksheet_submissions").add(submission);
-        submissionId = submissionRef.id;
-        logger.info("Submission saved to Firestore", {submissionId, worksheetId, userId});
-      } catch (firestoreError) {
-        logger.error("Failed to save submission to Firestore", {
-          error: firestoreError,
-          worksheetId,
-          userId
+        // Return grading results
+        response.json({
+          success: true,
+          submissionId,
+          gradedAnswers,
+          totalScore,
+          maxTotalScore,
+          partialScore: totalScore,
+          percentageScore: Math.round(percentageScore),
+          gradingSummary: {
+            correct: gradedAnswers.filter(ans => ans.isCorrect).length,
+            total: gradedAnswers.length,
+            averageConfidence: gradedAnswers.reduce((sum, ans) => sum + (ans.confidence || 0), 0) / gradedAnswers.length
+          }
         });
-        // Continue without failing the entire request
-      }
-    }
 
-    // Return grading results
-    response.json({
-      success: true,
-      submissionId,
-      gradedAnswers,
-      totalScore,
-      maxTotalScore,
-      partialScore: totalScore,
-      percentageScore: Math.round(percentageScore),
-      gradingSummary: {
-        correct: gradedAnswers.filter(ans => ans.isCorrect).length,
-        total: gradedAnswers.length,
-        averageConfidence: gradedAnswers.reduce((sum, ans) => sum + (ans.confidence || 0), 0) / gradedAnswers.length
+      } catch (error) {
+        logger.error("Answer grading failed", {
+          error: error instanceof Error ? error.message : error,
+          stack: error instanceof Error ? error.stack : undefined
+        });
+        response.status(500).json({
+          error: error instanceof Error ? error.message : "Answer grading failed",
+        });
       }
+      resolve(undefined);
     });
-
-  } catch (error) {
-    logger.error("Answer grading failed", {
-      error: error instanceof Error ? error.message : error,
-      stack: error instanceof Error ? error.stack : undefined
-    });
-    response.status(500).json({
-      error: error instanceof Error ? error.message : "Answer grading failed",
-    });
-  }
+  });
 });
