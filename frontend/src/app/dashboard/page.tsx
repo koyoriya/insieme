@@ -64,6 +64,10 @@ export default function Dashboard() {
   const [topic, setTopic] = useState("");
   const [numQuestions, setNumQuestions] = useState(5);
   const [isGenerating, setIsGenerating] = useState(false);
+  
+  // PDF upload state
+  const [selectedPDF, setSelectedPDF] = useState<File | null>(null);
+  const [pdfData, setPdfData] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -95,16 +99,59 @@ export default function Dashboard() {
     }
   };
 
+  const handlePDFUpload = async (file: File) => {
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      console.error('Invalid file type:', file.type);
+      alert('PDFファイルのみアップロード可能です。');
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      console.error('File size too large:', file.size);
+      alert('ファイルサイズは10MB以下にしてください。');
+      return;
+    }
+
+    console.log('Processing PDF file:', file.name, file.size);
+
+    setSelectedPDF(file);
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      setPdfData(base64);
+      console.log('PDF converted to base64, size:', base64.length);
+    };
+    reader.onerror = (e) => {
+      console.error('Failed to read PDF file:', e);
+      alert('PDFファイルの読み込みに失敗しました。');
+      setSelectedPDF(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removePDF = () => {
+    setSelectedPDF(null);
+    setPdfData(null);
+  };
+
   const handleGenerate = async () => {
     if (!user) return;
+    
+    // Validate input: either topic or PDF is required
+    if (!topic.trim() && !selectedPDF) {
+      alert('トピックを入力するか、PDFファイルをアップロードしてください。');
+      return;
+    }
     
     setIsGenerating(true);
     
     const tempWorksheetId = `temp_${Date.now()}`;
     
     try {
-      // Save temporary worksheet
-      
       const requestBody = {
         subject: "general",
         difficulty,
@@ -112,7 +159,8 @@ export default function Dashboard() {
         topic,
         numQuestions,
         userId: user.uid,
-        tempWorksheetId, // Pass temp worksheet ID to update it
+        tempWorksheetId,
+        pdfData: pdfData, // Include PDF data if available
       };
       
       const functionsBaseUrl = process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL;
@@ -213,12 +261,67 @@ export default function Dashboard() {
 
                 <div className="mt-6">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    トピック・テーマ
+                    📄 PDFファイル（オプション）
+                  </label>
+                  {selectedPDF ? (
+                    <div className="border-2 border-green-300 border-dashed rounded-lg p-4 bg-green-50">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <span className="text-green-700">📄 {selectedPDF.name}</span>
+                          <span className="text-sm text-green-600 ml-2">
+                            ({(selectedPDF.size / 1024 / 1024).toFixed(1)}MB)
+                          </span>
+                        </div>
+                        <button
+                          onClick={removePDF}
+                          className="text-red-600 hover:text-red-800 font-medium"
+                        >
+                          削除
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="border-2 border-gray-300 border-dashed rounded-lg p-6 text-center hover:border-indigo-400 transition-colors cursor-pointer"
+                      onClick={() => document.getElementById('pdf-upload')?.click()}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const file = e.dataTransfer.files[0];
+                        if (file) handlePDFUpload(file);
+                      }}
+                      onDragOver={(e) => e.preventDefault()}
+                    >
+                      <div className="text-gray-500">
+                        <p className="text-lg mb-2">📄 PDFファイルをアップロード</p>
+                        <p className="text-sm">
+                          クリックしてファイルを選択、またはドラッグ&ドロップ
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          最大10MB、PDF形式のみ
+                        </p>
+                      </div>
+                      <input
+                        id="pdf-upload"
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handlePDFUpload(file);
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-6">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    📝 トピック・追加指示
                   </label>
                   <textarea
                     value={topic}
                     onChange={(e) => setTopic(e.target.value)}
-                    placeholder="例：二次関数、世界史、英文法、プログラミング、物理、化学など学習したいトピックを入力してください"
+                    placeholder="例：二次関数、世界史、英文法、プログラミング、物理、化学など学習したいトピックを入力してください。PDFをアップロードした場合は、そのPDFに関する具体的な指示を入力できます。"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     rows={3}
                   />
@@ -227,7 +330,7 @@ export default function Dashboard() {
                 <div className="mt-6">
                   <button
                     onClick={handleGenerate}
-                    disabled={isGenerating || !topic}
+                    disabled={isGenerating || (!topic.trim() && !selectedPDF)}
                     className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-md flex items-center justify-center"
                   >
                     {isGenerating ? (
