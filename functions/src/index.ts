@@ -622,7 +622,7 @@ export const generateWorksheetPDF = onRequest({
 
         // Generate HTML content with proper CSS for page breaks and KaTeX
         const html = generateWorksheetHTML(worksheet, options);
-        
+
         await page.setContent(html, {waitUntil: "networkidle0"});
 
         // Generate PDF with proper page break support
@@ -641,7 +641,7 @@ export const generateWorksheetPDF = onRequest({
 
         // Return PDF as base64
         const pdfBase64 = Buffer.from(pdfBuffer).toString("base64");
-        
+
         response.json({
           success: true,
           pdfData: `data:application/pdf;base64,${pdfBase64}`,
@@ -669,12 +669,12 @@ function generateWorksheetHTML(worksheet: any, options: any = {}): string {
     text = text.replace(/\$([^$]+)\$/g, (_, math) => {
       return `<span class="katex-inline">\\(${math}\\)</span>`;
     });
-    
+
     // Replace display math delimited by $$ ... $$
     text = text.replace(/\$\$([^$]+)\$\$/g, (_, math) => {
       return `<div class="katex-display">\\[${math}\\]</div>`;
     });
-    
+
     return text;
   };
 
@@ -684,7 +684,7 @@ function generateWorksheetHTML(worksheet: any, options: any = {}): string {
         <span class="problem-number">問${index + 1}.</span>
         <span class="problem-question">${renderMath(problem.question)}</span>
       </div>
-      
+
       ${problem.options && problem.options.length > 0 ? `
         <div class="options-container">
           ${problem.options.map((option: string, optionIndex: number) => `
@@ -695,7 +695,7 @@ function generateWorksheetHTML(worksheet: any, options: any = {}): string {
           `).join("")}
         </div>
       ` : ""}
-      
+
       ${!options.includeAnswers ? `
         <div class="answer-space"></div>
       ` : `
@@ -725,7 +725,7 @@ function generateWorksheetHTML(worksheet: any, options: any = {}): string {
           padding: 0;
           box-sizing: border-box;
         }
-        
+
         body {
           font-family: 'Noto Sans JP', 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
           font-size: 11pt;
@@ -733,94 +733,94 @@ function generateWorksheetHTML(worksheet: any, options: any = {}): string {
           color: #000;
           background: white;
         }
-        
+
         .worksheet-header {
           text-align: center;
           margin-bottom: 20px;
           border-bottom: 2px solid #333;
           padding-bottom: 15px;
         }
-        
+
         .worksheet-title {
           font-size: 18pt;
           font-weight: bold;
           margin-bottom: 10px;
         }
-        
+
         .worksheet-description {
           font-size: 11pt;
           color: #666;
           margin-bottom: 10px;
         }
-        
+
         .worksheet-metadata {
           display: flex;
           justify-content: space-between;
           font-size: 10pt;
           color: #666;
         }
-        
+
         .problem-container {
           page-break-inside: avoid;
           break-inside: avoid;
           margin-bottom: 25px;
           min-height: 150px;
         }
-        
+
         .problem-header {
           margin-bottom: 10px;
         }
-        
+
         .problem-number {
           font-weight: bold;
           margin-right: 10px;
         }
-        
+
         .problem-question {
           display: inline;
         }
-        
+
         .options-container {
           margin-left: 20px;
           margin-bottom: 10px;
         }
-        
+
         .option {
           margin: 5px 0;
         }
-        
+
         .option-label {
           font-weight: bold;
           margin-right: 8px;
         }
-        
+
         .option-text {
           display: inline;
         }
-        
+
         .answer-space {
           margin-top: 20px;
           margin-bottom: 20px;
           min-height: 80px;
         }
-        
+
         .answer-section {
           margin-top: 15px;
           padding: 10px;
           background: #f0f8ff;
           border-left: 4px solid #007bff;
         }
-        
+
         .answer-label, .explanation-label {
           font-weight: bold;
           color: #007bff;
           margin-bottom: 5px;
         }
-        
+
         .answer-text, .explanation-text {
           margin-bottom: 10px;
         }
-        
+
         /* KaTeX fraction improvements */
         .katex .mfrac .frac-line {
           border-bottom: 1.5px solid #000 !important;
@@ -829,15 +829,15 @@ function generateWorksheetHTML(worksheet: any, options: any = {}): string {
           position: relative !important;
           top: 8px !important;
         }
-        
+
         .katex .mfrac > span > span:first-child {
           padding-bottom: 10px !important;
         }
-        
+
         .katex .mfrac > span > span:last-child {
           padding-top: 10px !important;
         }
-        
+
         /* Ensure proper page breaks */
         @media print {
           .problem-container {
@@ -856,11 +856,11 @@ function generateWorksheetHTML(worksheet: any, options: any = {}): string {
           <span>作成日: ${worksheet.createdAt ? new Date(worksheet.createdAt).toLocaleDateString("ja-JP") : "N/A"}</span>
         </div>
       </div>
-      
+
       <div class="problems-container">
         ${problemsHTML}
       </div>
-      
+
       <script>
         document.addEventListener("DOMContentLoaded", function() {
           renderMathInElement(document.body, {
@@ -903,9 +903,9 @@ export const gradeAnswersPDF = onRequest({
         const {problems, answerPDFData, userId, worksheetId} = request.body;
 
         logger.info("Parsed PDF grading request", {
-          problems: problems?.length, 
-          hasPDFData: !!answerPDFData, 
-          userId, 
+          problems: problems?.length,
+          hasPDFData: !!answerPDFData,
+          userId,
           worksheetId
         });
 
@@ -924,7 +924,7 @@ export const gradeAnswersPDF = onRequest({
         try {
           const base64 = answerPDFData.split(",")[1];
           if (!base64) throw new Error("Base64データの抽出に失敗しました");
-          
+
           const buffer = Buffer.from(base64, "base64");
           const upload = await fileManager.uploadFile(buffer, {
             mimeType: "application/pdf",
