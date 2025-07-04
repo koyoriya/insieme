@@ -72,6 +72,43 @@ function createPDFElement(worksheet: WorksheetPDFData, options: PDFOptions): HTM
     color: #000;
   `;
 
+  // Copy existing KaTeX styles from the page
+  const katexStyles = document.createElement('style');
+  try {
+    // Try to find existing KaTeX stylesheet
+    const stylesheets = Array.from(document.styleSheets);
+    let katexCss = '';
+    
+    for (const sheet of stylesheets) {
+      try {
+        // Check if it's a KaTeX stylesheet
+        if (sheet.href && sheet.href.includes('katex')) {
+          const rules = Array.from(sheet.cssRules || []);
+          katexCss += rules.map(rule => rule.cssText).join('\n');
+        }
+      } catch (e) {
+        // CORS error - can't access external stylesheet
+        console.warn('Cannot access stylesheet:', sheet.href);
+      }
+    }
+    
+    katexStyles.textContent = katexCss;
+  } catch (e) {
+    console.warn('Failed to copy KaTeX styles:', e);
+    // Minimal fallback styles
+    katexStyles.textContent = `
+      .katex { font: normal 1.21em serif; line-height: 1.2; display: inline-block; vertical-align: baseline; }
+      .katex .base { display: inline-block; vertical-align: baseline; }
+      .katex .mfrac .frac-line { border-bottom: 1px solid; }
+      .katex .mathnormal { vertical-align: baseline !important; }
+      .katex .mathit { vertical-align: baseline !important; }
+      .katex .mathrm { vertical-align: baseline !important; }
+      .katex .mathbf { vertical-align: baseline !important; }
+    `;
+  }
+  
+  element.appendChild(katexStyles);
+
   // Header
   const header = document.createElement('div');
   header.style.cssText = `
@@ -128,11 +165,40 @@ function createPDFElement(worksheet: WorksheetPDFData, options: PDFOptions): HTM
   problemsContainer.style.marginTop = '20px';
 
   worksheet.problems.forEach((problem, index) => {
+    // Add page break before each problem (except the first one)
+    if (index > 0) {
+      const pageBreak = document.createElement('hr');
+      pageBreak.style.cssText = `
+        page-break-before: always !important;
+        break-before: page !important;
+        visibility: hidden;
+        margin: 0;
+        padding: 0;
+        border: none;
+        height: 0;
+      `;
+      problemsContainer.appendChild(pageBreak);
+    }
+
     const problemDiv = document.createElement('div');
     problemDiv.style.cssText = `
       margin-bottom: 25px;
-      page-break-inside: avoid;
     `;
+
+    // Create a unified container for all problem content with page break control
+    const problemContentDiv = document.createElement('div');
+    problemContentDiv.style.cssText = `
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      display: block;
+      overflow: visible;
+      min-height: 150px;
+      border: 0.1px solid transparent;
+    `;
+    
+    // Add explicit page break avoidance attributes
+    problemContentDiv.setAttribute('data-problem-container', 'true');
+    problemContentDiv.setAttribute('style', problemContentDiv.getAttribute('style') + '; page-break-inside: avoid !important; break-inside: avoid !important;');
 
     // Problem number and question
     const questionDiv = document.createElement('div');
@@ -152,7 +218,7 @@ function createPDFElement(worksheet: WorksheetPDFData, options: PDFOptions): HTM
     
     questionDiv.appendChild(questionNumber);
     questionDiv.appendChild(questionText);
-    problemDiv.appendChild(questionDiv);
+    problemContentDiv.appendChild(questionDiv);
 
     // Options for multiple choice
     if (problem.options && problem.options.length > 0) {
@@ -183,10 +249,20 @@ function createPDFElement(worksheet: WorksheetPDFData, options: PDFOptions): HTM
         optionsDiv.appendChild(optionDiv);
       });
       
-      problemDiv.appendChild(optionsDiv);
+      problemContentDiv.appendChild(optionsDiv);
     }
 
-    // No answer space needed for PDF export - users will write on paper
+    // Add answer space for handwritten responses
+    if (!options.includeAnswers) {
+      const answerSpace = document.createElement('div');
+      answerSpace.style.cssText = `
+        margin-top: 20px;
+        margin-bottom: 20px;
+        min-height: 80px;
+      `;
+      
+      problemContentDiv.appendChild(answerSpace);
+    }
 
     // Answers and explanations (if enabled)
     if (options.includeAnswers) {
@@ -225,9 +301,11 @@ function createPDFElement(worksheet: WorksheetPDFData, options: PDFOptions): HTM
       answerSection.appendChild(answerText);
       answerSection.appendChild(explanationLabel);
       answerSection.appendChild(explanationText);
-      problemDiv.appendChild(answerSection);
+      problemContentDiv.appendChild(answerSection);
     }
 
+    // Add the unified content container to the problem div
+    problemDiv.appendChild(problemContentDiv);
     problemsContainer.appendChild(problemDiv);
   });
 
@@ -236,7 +314,52 @@ function createPDFElement(worksheet: WorksheetPDFData, options: PDFOptions): HTM
 }
 
 /**
- * Generate PDF from worksheet data
+ * Generate PDF from worksheet data using server-side Puppeteer
+ */
+export async function generateWorksheetPDFServer(
+  worksheet: WorksheetPDFData,
+  options: PDFOptions = {}
+): Promise<void> {
+  const functionsBaseUrl = process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL || 'http://127.0.0.1:5001/insieme-dev-d7459/us-central1';
+  
+  try {
+    const response = await fetch(`${functionsBaseUrl}/generateWorksheetPDF`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        worksheet,
+        options
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    
+    if (!result.success || !result.pdfData) {
+      throw new Error('Failed to generate PDF on server');
+    }
+
+    // Create download link
+    const link = document.createElement('a');
+    link.href = result.pdfData;
+    link.download = result.filename || `${worksheet.title.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '_')}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+  } catch (error) {
+    console.error('Server-side PDF generation failed:', error);
+    throw new Error('PDF生成に失敗しました');
+  }
+}
+
+/**
+ * Generate PDF from worksheet data (legacy html2canvas version)
  */
 export async function generateWorksheetPDF(
   worksheet: WorksheetPDFData,
@@ -258,12 +381,146 @@ export async function generateWorksheetPDF(
     element.style.top = '0';
     document.body.appendChild(element);
 
-    // Generate canvas
+    // Wait for fonts and styles to load
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Generate canvas with additional options for better math rendering and page breaks
     const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
       allowTaint: true,
-      backgroundColor: '#ffffff'
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: element.scrollWidth,
+      height: element.scrollHeight,
+      removeContainer: false,
+      onclone: (clonedDoc) => {
+        // Ensure KaTeX styles are applied in the cloned document
+        const katexLink = clonedDoc.createElement('link');
+        katexLink.rel = 'stylesheet';
+        katexLink.href = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css';
+        clonedDoc.head.appendChild(katexLink);
+        
+        // Apply minimal inline styles to KaTeX elements
+        const katexElements = clonedDoc.querySelectorAll('.katex');
+        katexElements.forEach(el => {
+          const htmlEl = el as HTMLElement;
+          htmlEl.style.font = 'normal 1.21em Times New Roman, serif';
+          htmlEl.style.lineHeight = '1.2';
+          htmlEl.style.verticalAlign = 'baseline';
+        });
+        
+        // Fix vertical alignment for math variables
+        const mathElements = clonedDoc.querySelectorAll('.katex .mathnormal, .katex .mathit, .katex .mathrm, .katex .mathbf, .katex .base');
+        mathElements.forEach(el => {
+          const mathEl = el as HTMLElement;
+          mathEl.style.verticalAlign = 'baseline';
+        });
+        
+        // Ensure page breaks work with hr tags
+        const pageBreaks = clonedDoc.querySelectorAll('hr');
+        pageBreaks.forEach(hr => {
+          const hrEl = hr as HTMLElement;
+          hrEl.style.setProperty('page-break-before', 'always', 'important');
+          hrEl.style.setProperty('break-before', 'page', 'important');
+          hrEl.style.setProperty('visibility', 'hidden', 'important');
+          hrEl.style.setProperty('margin', '0', 'important');
+          hrEl.style.setProperty('padding', '0', 'important');
+          hrEl.style.setProperty('border', 'none', 'important');
+          hrEl.style.setProperty('height', '0', 'important');
+        });
+
+        // Ensure problem containers don't break across pages
+        const problemContainers = clonedDoc.querySelectorAll('[data-problem-container="true"]');
+        problemContainers.forEach(div => {
+          const divEl = div as HTMLElement;
+          divEl.style.setProperty('page-break-inside', 'avoid', 'important');
+          divEl.style.setProperty('break-inside', 'avoid', 'important');
+          divEl.style.setProperty('display', 'block', 'important');
+          divEl.style.setProperty('overflow', 'visible', 'important');
+        });
+        
+        // Also target any div containing problem numbers
+        const allDivs = clonedDoc.querySelectorAll('div');
+        allDivs.forEach(div => {
+          const divEl = div as HTMLElement;
+          const text = divEl.textContent || '';
+          // Look for problem patterns like "問1" "問2" etc.
+          if (/問\d+\./.test(text) || divEl.style.marginBottom === '25px') {
+            divEl.style.setProperty('page-break-inside', 'avoid', 'important');
+            divEl.style.setProperty('break-inside', 'avoid', 'important');
+            divEl.style.setProperty('display', 'block', 'important');
+            
+            // Also apply to parent if it exists
+            const parent = divEl.parentElement;
+            if (parent && parent.tagName === 'DIV') {
+              parent.style.setProperty('page-break-inside', 'avoid', 'important');
+              parent.style.setProperty('break-inside', 'avoid', 'important');
+            }
+          }
+        });
+        
+        // Apply refined fraction line styles
+        const fracLines = clonedDoc.querySelectorAll('.katex .mfrac .frac-line');
+        fracLines.forEach(line => {
+          const lineEl = line as HTMLElement;
+          lineEl.style.setProperty('border-bottom', '1.5px solid #000', 'important');
+          lineEl.style.setProperty('height', '1.5px', 'important');
+          lineEl.style.setProperty('margin', '6px 0', 'important');
+          lineEl.style.setProperty('position', 'relative', 'important');
+          lineEl.style.setProperty('top', '8px', 'important');
+        });
+        
+        // Add refined spacing: numerator bottom, denominator top
+        const fracParts = clonedDoc.querySelectorAll('.katex .mfrac > span > span');
+        fracParts.forEach((part, index) => {
+          const partEl = part as HTMLElement;
+          if (index === 0) {
+            // First child (numerator) - only bottom padding
+            partEl.style.setProperty('padding-bottom', '10px', 'important');
+          } else if (index === 1) {
+            // Second child (denominator) - only top padding
+            partEl.style.setProperty('padding-top', '10px', 'important');
+          }
+        });
+        
+        // Try broader selectors with same refined logic
+        const allMfracContainers = clonedDoc.querySelectorAll('.mfrac, [class*="mfrac"]');
+        allMfracContainers.forEach(container => {
+          const spans = container.querySelectorAll('span > span');
+          spans.forEach((span, index) => {
+            const spanEl = span as HTMLElement;
+            if (index === 0) {
+              spanEl.style.setProperty('padding-bottom', '10px', 'important');
+            } else if (index === 1) {
+              spanEl.style.setProperty('padding-top', '10px', 'important');
+            }
+          });
+        });
+        
+        // Also try targeting by more specific selectors
+        const allFracLines = clonedDoc.querySelectorAll('.frac-line, [class*="frac-line"]');
+        allFracLines.forEach(line => {
+          const lineEl = line as HTMLElement;
+          lineEl.style.margin = '3px 0';
+          lineEl.style.position = 'relative';
+          lineEl.style.top = '8px';
+        });
+        
+        // Try to find any element that looks like a fraction line
+        const allElements = clonedDoc.querySelectorAll('*');
+        allElements.forEach(el => {
+          const element = el as HTMLElement;
+          const style = window.getComputedStyle ? window.getComputedStyle(element) : element.style;
+          // Look for elements that have border-bottom (likely fraction lines)
+          if (element.style.borderBottom || element.style.borderBottomWidth || 
+              element.className.includes('frac') || element.className.includes('line')) {
+            element.style.marginTop = '8px';
+            element.style.position = 'relative';
+            element.style.top = '8px';
+          }
+        });
+      }
     });
 
     // Remove temporary element
