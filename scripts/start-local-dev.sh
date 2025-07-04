@@ -44,15 +44,15 @@ EMULATOR_PID=$!
 echo "⏳ Waiting for emulators to initialize..."
 sleep 10
 
-# Check if emulators are running
-if ! curl -s http://127.0.0.1:4000 > /dev/null; then
+# Check if emulators are running by checking the functions endpoint
+if ! curl -s http://127.0.0.1:5001 > /dev/null; then
     echo "❌ Error: Firebase Emulators failed to start"
     kill $EMULATOR_PID 2>/dev/null || true
     exit 1
 fi
 
 echo "✅ Firebase Emulators are running!"
-echo "   - Emulator UI: http://127.0.0.1:4000"
+echo "   - Emulator UI: http://127.0.0.1:4002"
 echo "   - Functions: http://127.0.0.1:5001"
 echo "   - Firestore: http://127.0.0.1:8080"
 echo "   - Auth: http://127.0.0.1:9099"
@@ -69,7 +69,7 @@ sleep 5
 echo "✅ Local Development Environment is ready!"
 echo "=================================================="
 echo "🎉 Access your application at: http://localhost:3001"
-echo "🔧 Firebase Emulator UI: http://127.0.0.1:4000"
+echo "🔧 Firebase Emulator UI: http://127.0.0.1:4002"
 echo ""
 echo "To stop the development environment, press Ctrl+C"
 

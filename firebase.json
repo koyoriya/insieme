@@ -48,10 +48,16 @@
     },
     "ui": {
       "enabled": true,
-      "port": 4000
+      "port": 4002
     },
     "auth": {
       "port": 9099
+    },
+    "hub": {
+      "port": 4402
+    },
+    "logging": {
+      "port": 4502
     },
     "singleProjectMode": true
   }

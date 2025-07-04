@@ -22,6 +22,11 @@ function WorksheetPageContent() {
   const [selectedOptions, setSelectedOptions] = useState<{[problemId: string]: string}>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [worksheetLoading, setWorksheetLoading] = useState(true);
+  
+  // Handwritten PDF submission states
+  const [submissionMode, setSubmissionMode] = useState<'text' | 'pdf'>('text');
+  const [answerPDF, setAnswerPDF] = useState<File | null>(null);
+  const [answerPDFData, setAnswerPDFData] = useState<string | null>(null);
 
   // PDF generation hook
   const { isGenerating, error: pdfError, generateProblemsPDF, generateAnswersPDF, clearError } = useWorksheetPDF();
@@ -89,41 +94,104 @@ function WorksheetPageContent() {
     setAnswers(prev => ({ ...prev, [problemId]: option }));
   };
 
+  const handlePDFAnswerUpload = async (file: File) => {
+    // Validate file type
+    if (file.type !== 'application/pdf') {
+      console.error('Invalid file type:', file.type);
+      alert('PDFファイルのみアップロード可能です。');
+      return;
+    }
+
+    // Validate file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      console.error('File size too large:', file.size);
+      alert('ファイルサイズは10MB以下にしてください。');
+      return;
+    }
+
+    console.log('Processing answer PDF file:', file.name, file.size);
+    setAnswerPDF(file);
+
+    // Convert to base64
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const base64 = e.target?.result as string;
+      setAnswerPDFData(base64);
+      console.log('Answer PDF converted to base64, size:', base64.length);
+    };
+    reader.onerror = (e) => {
+      console.error('Failed to read answer PDF file:', e);
+      alert('PDFファイルの読み込みに失敗しました。');
+      setAnswerPDF(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeAnswerPDF = () => {
+    setAnswerPDF(null);
+    setAnswerPDFData(null);
+  };
+
   const handleSubmit = async () => {
     if (!user || !worksheet || !worksheetId) return;
 
-    // Validate all questions are answered
-    const unansweredProblems = worksheet.problems.filter(problem => 
-      !answers[problem.id] || answers[problem.id].trim() === ''
-    );
-    
-    if (unansweredProblems.length > 0) {
-      alert(`まだ回答されていない問題があります: 問題 ${unansweredProblems.map((_, i) => i + 1).join(', ')}`);
-      return;
+    // Validate based on submission mode
+    if (submissionMode === 'text') {
+      const unansweredProblems = worksheet.problems.filter(problem => 
+        !answers[problem.id] || answers[problem.id].trim() === ''
+      );
+      
+      if (unansweredProblems.length > 0) {
+        alert(`まだ回答されていない問題があります: 問題 ${unansweredProblems.map((_, i) => i + 1).join(', ')}`);
+        return;
+      }
+    } else if (submissionMode === 'pdf') {
+      if (!answerPDF || !answerPDFData) {
+        alert('解答PDFファイルをアップロードしてください。');
+        return;
+      }
     }
 
     setIsSubmitting(true);
     try {
-      // Prepare answer data for LLM grading API
-      const answerData = worksheet.problems.map(problem => ({
-        problemId: problem.id,
-        answer: answers[problem.id].trim()
-      }));
-
-      // Call LLM grading API
       const functionsBaseUrl = process.env.NEXT_PUBLIC_FUNCTIONS_BASE_URL;
-      const response = await fetch(`${functionsBaseUrl}/gradeAnswers`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          problems: worksheet.problems,
-          answers: answerData,
-          userId: user.uid,
-          worksheetId
-        })
-      });
+      let response;
+
+      if (submissionMode === 'text') {
+        // Prepare answer data for LLM grading API
+        const answerData = worksheet.problems.map(problem => ({
+          problemId: problem.id,
+          answer: answers[problem.id].trim()
+        }));
+
+        // Call LLM grading API
+        response = await fetch(`${functionsBaseUrl}/gradeAnswers`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            problems: worksheet.problems,
+            answers: answerData,
+            userId: user.uid,
+            worksheetId
+          })
+        });
+      } else {
+        // PDF mode - call new PDF grading API
+        response = await fetch(`${functionsBaseUrl}/gradeAnswersPDF`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            problems: worksheet.problems,
+            answerPDFData: answerPDFData,
+            userId: user.uid,
+            worksheetId
+          })
+        });
+      }
 
       if (!response.ok) {
         throw new Error(`Grading failed: ${response.status}`);
@@ -300,66 +368,231 @@ function WorksheetPageContent() {
 
             {!submission ? (
               <>
-                <h2 className="text-lg font-semibold mb-4">問題一覧と解答</h2>
-                <div className="space-y-6">
-                  {worksheet.problems.map((problem, index) => (
-                    <div key={problem.id} className="border border-gray-200 rounded-lg p-6">
-                      <div className="flex items-center mb-4">
-                        <span className="inline-block px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded mr-2">
-                          問題 {index + 1}
-                        </span>
-                        <span className={`inline-block px-2 py-1 text-xs rounded ${
-                          problem.options ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {problem.options ? '選択問題' : '記述問題'}
-                        </span>
+                <div className="mb-6">
+                  <h2 className="text-lg font-semibold mb-4">解答方法を選択</h2>
+                  <div className="flex space-x-4 mb-6">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="submissionMode"
+                        value="text"
+                        checked={submissionMode === 'text'}
+                        onChange={(e) => setSubmissionMode(e.target.value as 'text' | 'pdf')}
+                        className="mr-2"
+                      />
+                      <span className="text-sm font-medium">テキスト入力</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="submissionMode"
+                        value="pdf"
+                        checked={submissionMode === 'pdf'}
+                        onChange={(e) => setSubmissionMode(e.target.value as 'text' | 'pdf')}
+                        className="mr-2"
+                      />
+                      <span className="text-sm font-medium">手書きPDF提出</span>
+                    </label>
+                  </div>
+                  
+                  {submissionMode === 'pdf' && (
+                    <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <h3 className="font-medium text-blue-900 mb-2">📝 手書きPDF提出について</h3>
+                      <div className="text-sm text-blue-800 space-y-1">
+                        <p>1. 上の「PDF出力」ボタンから問題をPDF形式でダウンロード</p>
+                        <p>2. 印刷またはタブレットで手書き解答</p>
+                        <p>3. 解答をPDFファイルとしてスキャン・保存</p>
+                        <p>4. 下のエリアから解答PDFをアップロード</p>
                       </div>
-                      
-                      <h3 className="font-medium text-gray-900 mb-4">
-                        <MathRenderer>{problem.question}</MathRenderer>
-                      </h3>
-                      
-                      {problem.options ? (
-                        <div className="space-y-2">
-                          <p className="font-medium mb-3">選択肢:</p>
-                          {problem.options.map((option, optIndex) => (
-                            <label
-                              key={optIndex}
-                              className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
-                                selectedOptions[problem.id] === option
-                                  ? 'border-indigo-500 bg-indigo-50'
-                                  : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name={`problem-${problem.id}`}
-                                value={option}
-                                checked={selectedOptions[problem.id] === option}
-                                onChange={(e) => handleOptionChange(problem.id, e.target.value)}
-                                className="mr-3"
+                    </div>
+                  )}
+                </div>
+                
+                {submissionMode === 'text' ? (
+                  <>
+                    <h2 className="text-lg font-semibold mb-4">問題一覧と解答</h2>
+                    <div className="space-y-6">
+                      {worksheet.problems.map((problem, index) => (
+                        <div key={problem.id} className="border border-gray-200 rounded-lg p-6">
+                          <div className="flex items-center mb-4">
+                            <span className="inline-block px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded mr-2">
+                              問題 {index + 1}
+                            </span>
+                            <span className={`inline-block px-2 py-1 text-xs rounded ${
+                              problem.options ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                            }`}>
+                              {problem.options ? '選択問題' : '記述問題'}
+                            </span>
+                          </div>
+                          
+                          <h3 className="font-medium text-gray-900 mb-4">
+                            <MathRenderer>{problem.question}</MathRenderer>
+                          </h3>
+                          
+                          {problem.options ? (
+                            <div className="space-y-2">
+                              <p className="font-medium mb-3">選択肢:</p>
+                              {problem.options.map((option, optIndex) => (
+                                <label
+                                  key={optIndex}
+                                  className={`flex items-center p-3 border rounded-lg cursor-pointer transition-colors ${
+                                    selectedOptions[problem.id] === option
+                                      ? 'border-indigo-500 bg-indigo-50'
+                                      : 'border-gray-200 hover:border-gray-300'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`problem-${problem.id}`}
+                                    value={option}
+                                    checked={selectedOptions[problem.id] === option}
+                                    onChange={(e) => handleOptionChange(problem.id, e.target.value)}
+                                    className="mr-3"
+                                  />
+                                  <span className="text-gray-700">
+                                    <MathRenderer>{option}</MathRenderer>
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="font-medium mb-3">回答:</p>
+                              <textarea
+                                value={answers[problem.id] || ''}
+                                onChange={(e) => handleAnswerChange(problem.id, e.target.value)}
+                                placeholder="こちらに回答を入力してください..."
+                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 h-24"
+                                rows={4}
                               />
-                              <span className="text-gray-700">
-                                <MathRenderer>{option}</MathRenderer>
-                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="text-lg font-semibold mb-4">問題確認</h2>
+                    <div className="space-y-6 mb-8">
+                      {worksheet.problems.map((problem, index) => (
+                        <div key={problem.id} className="border border-gray-200 rounded-lg p-6">
+                          <div className="flex items-center mb-4">
+                            <span className="inline-block px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded mr-2">
+                              問題 {index + 1}
+                            </span>
+                            <span className={`inline-block px-2 py-1 text-xs rounded ${
+                              problem.options ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                            }`}>
+                              {problem.options ? '選択問題' : '記述問題'}
+                            </span>
+                          </div>
+                          
+                          <h3 className="font-medium text-gray-900 mb-4">
+                            <MathRenderer>{problem.question}</MathRenderer>
+                          </h3>
+                          
+                          {problem.options && (
+                            <div className="space-y-2">
+                              <p className="font-medium mb-3">選択肢:</p>
+                              {problem.options.map((option, optIndex) => (
+                                <div key={optIndex} className="p-3 border border-gray-200 rounded-lg">
+                                  <span className="text-gray-700">
+                                    <MathRenderer>{option}</MathRenderer>
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* PDF Upload Section */}
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8">
+                      <h3 className="text-lg font-semibold mb-4 text-center">解答PDFアップロード</h3>
+                      
+                      {!answerPDF ? (
+                        <div className="text-center">
+                          <div className="mb-4">
+                            <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 48 48">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" />
+                            </svg>
+                          </div>
+                          <p className="text-gray-600 mb-4">
+                            手書き解答をPDFファイルとしてアップロードしてください
+                          </p>
+                          <div className="mb-4">
+                            <input
+                              type="file"
+                              accept=".pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handlePDFAnswerUpload(file);
+                                }
+                              }}
+                              className="hidden"
+                              id="pdf-upload"
+                            />
+                            <label
+                              htmlFor="pdf-upload"
+                              className="cursor-pointer inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                            >
+                              📁 PDFファイルを選択
                             </label>
-                          ))}
+                          </div>
+                          <p className="text-xs text-gray-500">
+                            ファイルサイズ: 10MB以下 | 形式: PDF
+                          </p>
                         </div>
                       ) : (
-                        <div>
-                          <p className="font-medium mb-3">回答:</p>
-                          <textarea
-                            value={answers[problem.id] || ''}
-                            onChange={(e) => handleAnswerChange(problem.id, e.target.value)}
-                            placeholder="こちらに回答を入力してください..."
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 h-24"
-                            rows={4}
-                          />
+                        <div className="text-center">
+                          <div className="mb-4">
+                            <svg className="mx-auto h-12 w-12 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 48 48">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          </div>
+                          <p className="text-green-600 font-medium mb-2">
+                            ✅ PDFファイルがアップロードされました
+                          </p>
+                          <p className="text-gray-600 mb-4">
+                            ファイル名: {answerPDF.name}
+                          </p>
+                          <p className="text-gray-500 text-sm mb-4">
+                            サイズ: {(answerPDF.size / 1024 / 1024).toFixed(2)} MB
+                          </p>
+                          <div className="flex justify-center space-x-2">
+                            <button
+                              onClick={removeAnswerPDF}
+                              className="px-4 py-2 border border-red-300 rounded-md text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+                            >
+                              🗑️ ファイルを削除
+                            </button>
+                            <label
+                              htmlFor="pdf-upload-replace"
+                              className="cursor-pointer px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+                            >
+                              🔄 ファイルを変更
+                            </label>
+                            <input
+                              type="file"
+                              accept=".pdf"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  handlePDFAnswerUpload(file);
+                                }
+                              }}
+                              className="hidden"
+                              id="pdf-upload-replace"
+                            />
+                          </div>
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
+                  </>
+                )}
                 
                 <div className="mt-8 pt-6 border-t">
                   <button

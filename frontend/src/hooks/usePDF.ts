@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { generateWorksheetPDF, PDFOptions, WorksheetPDFData } from '@/lib/pdf';
+import { generateWorksheetPDFServer, generateWorksheetPDF, PDFOptions, WorksheetPDFData } from '@/lib/pdf';
 
 /**
  * Hook for PDF generation functionality
@@ -19,11 +19,17 @@ export function usePDF() {
     setError(null);
 
     try {
-      await generateWorksheetPDF(worksheet, options);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'PDF生成に失敗しました';
-      setError(errorMessage);
-      throw err;
+      // Try server-side generation first, fallback to client-side if needed
+      await generateWorksheetPDFServer(worksheet, options);
+    } catch (serverErr) {
+      console.warn('Server-side PDF generation failed, falling back to client-side:', serverErr);
+      try {
+        await generateWorksheetPDF(worksheet, options);
+      } catch (clientErr) {
+        const errorMessage = clientErr instanceof Error ? clientErr.message : 'PDF生成に失敗しました';
+        setError(errorMessage);
+        throw clientErr;
+      }
     } finally {
       setIsGenerating(false);
     }
