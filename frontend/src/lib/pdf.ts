@@ -86,7 +86,7 @@ function createPDFElement(worksheet: WorksheetPDFData, options: PDFOptions): HTM
           const rules = Array.from(sheet.cssRules || []);
           katexCss += rules.map(rule => rule.cssText).join('\n');
         }
-      } catch (e) {
+      } catch {
         // CORS error - can't access external stylesheet
         console.warn('Cannot access stylesheet:', sheet.href);
       }
@@ -511,7 +511,6 @@ export async function generateWorksheetPDF(
         const allElements = clonedDoc.querySelectorAll('*');
         allElements.forEach(el => {
           const element = el as HTMLElement;
-          const style = window.getComputedStyle ? window.getComputedStyle(element) : element.style;
           // Look for elements that have border-bottom (likely fraction lines)
           if (element.style.borderBottom || element.style.borderBottomWidth || 
               element.className.includes('frac') || element.className.includes('line')) {
