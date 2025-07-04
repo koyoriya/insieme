@@ -117,7 +117,20 @@ function buildPrompt(options: {
   } else {
     p += `- トピック: ${options.topic}\n`;
   }
-  p += `\n【出力形式】\nJSON形式で次の構造を純粋に返してください。
+  p += `\n【数式記法】
+- 数式は必ずLaTeX記法を使用してください
+- インライン数式: $数式$ （例: $x^2 + y^2 = 1$）
+- ブロック数式: $$数式$$ （例: $$\\frac{d}{dx}f(x) = \\lim_{h \\to 0}\\frac{f(x+h)-f(x)}{h}$$）
+- 分数: \\frac{分子}{分母}
+- 指数: x^{指数}
+- 根号: \\sqrt{中身}
+- ギリシャ文字: \\alpha, \\beta, \\pi, \\theta など
+- 三角関数: \\sin, \\cos, \\tan
+- 対数: \\log, \\ln
+- 極限: \\lim, \\sum, \\int
+
+【出力形式】
+JSON形式で次の構造を純粋に返してください。
 {
   "problems": [
     {
@@ -132,6 +145,7 @@ function buildPrompt(options: {
 - 選択肢問題は正答＋誤答3つ
 - 記述・論述問題は模範解答付き
 - 日本語
+- 数式は必ずLaTeX記法で記述
 - コードブロック禁止、純JSONのみ
 `;
   return p;
