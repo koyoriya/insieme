@@ -50,7 +50,8 @@ const getFirebaseConfig = () => {
       
       if (missingVars.length > 0) {
         console.error(`Missing required Firebase environment variables for ${env}:`, missingVars);
-        throw new Error(`Missing Firebase environment variables: ${missingVars.join(', ')}`);
+        console.error('Available environment variables:', Object.keys(process.env).filter(key => key.startsWith('NEXT_PUBLIC_')));
+        throw new Error(`Missing Firebase environment variables: ${missingVars.join(', ')}. Please ensure these are set in your environment or GitHub Actions secrets.`);
       }
 
       return {
