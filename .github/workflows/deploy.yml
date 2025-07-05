@@ -35,6 +35,8 @@ jobs:
         
       - name: Build frontend
         working-directory: ./frontend
+        env:
+          NEXT_PUBLIC_ENV: PROD
         run: npm run build
         
       # Build and deploy functions
