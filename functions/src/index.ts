@@ -152,6 +152,111 @@ JSON形式で次の構造を純粋に返してください。
   return p;
 }
 
+// ✅ ワークシートタイトル生成ロジック
+async function generateWorksheetTitle(options: {
+  topic?: string;
+  difficulty: string;
+  numQuestions: number;
+  pdfIncluded: boolean;
+  generatedProblems?: any[];
+}): Promise<string> {
+  if (!process.env.GEMINI_API_KEY) {
+    // Fallback to old format if no API key
+    return generateFallbackTitle(options);
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({model: "gemini-2.5-pro"});
+    const difficultyMap: {[key: string]: string} = {easy: "簡単", medium: "普通", hard: "難しい"};
+    const difficultyText = difficultyMap[options.difficulty] || "普通";
+
+    let prompt = `あなたは教育コンテンツの専門家です。以下の情報を基に、学習ワークシートの魅力的で分かりやすいタイトルを1つ生成してください。
+
+【ワークシート情報】
+- 問題数: ${options.numQuestions}問
+- 難易度: ${difficultyText}`;
+
+    if (options.pdfIncluded) {
+      prompt += `
+- 資料: PDFファイルの内容に基づく問題`;
+      if (options.topic) {
+        prompt += `
+- 追加指示: ${options.topic}`;
+      }
+    } else if (options.topic) {
+      prompt += `
+- トピック: ${options.topic}`;
+    }
+
+    if (options.generatedProblems && options.generatedProblems.length > 0) {
+      prompt += `
+
+【生成された問題の例】
+${options.generatedProblems.slice(0, 2).map((p, i) => `
+${i + 1}. ${p.question?.substring(0, 100) || ""}...`).join("")}`;
+    }
+
+    prompt += `
+
+【タイトル生成の要件】
+- 15文字以内で簡潔に
+- 学習者が内容を理解しやすい
+- 難易度や問題数は含めない
+- 記号や絵文字は使用しない
+- 1行で完結させる
+- 学習内容を具体的に表現する
+
+【出力形式】
+タイトルのみを返してください。説明や前置きは不要です。
+
+例：
+- 二次関数の基本
+- 世界史の重要事件
+- 英文法の基礎
+- プログラミングの基本概念`;
+
+    const result = await model.generateContent(prompt);
+    const generatedTitle = result.response.text().trim();
+
+    // Clean up the response (remove quotes, extra whitespace, etc.)
+    const cleanTitle = generatedTitle
+      .replace(/^["']|["']$/g, "") // Remove quotes
+      .replace(/\n.*$/s, "") // Take only the first line
+      .trim();
+
+    // Validate length and content
+    if (cleanTitle.length > 0 && cleanTitle.length <= 25) {
+      return cleanTitle;
+    } else {
+      logger.warn("Generated title too long or empty, using fallback", {generatedTitle, cleanTitle});
+      return generateFallbackTitle(options);
+    }
+  } catch (error) {
+    logger.error("Title generation failed, using fallback", error);
+    return generateFallbackTitle(options);
+  }
+}
+
+// Fallback title generation (original format)
+function generateFallbackTitle(options: {
+  topic?: string;
+  difficulty: string;
+  pdfIncluded: boolean;
+}): string {
+  const difficultyMap: {[key: string]: string} = {easy: "簡単", medium: "普通", hard: "難しい"};
+  const difficultyText = difficultyMap[options.difficulty] || "普通";
+
+  if (options.pdfIncluded && options.topic) {
+    return `PDF資料 + ${options.topic} - ${difficultyText}`;
+  } else if (options.pdfIncluded) {
+    return `PDF資料 - ${difficultyText}`;
+  } else if (options.topic) {
+    return `${options.topic} - ${difficultyText}`;
+  } else {
+    return `学習問題 - ${difficultyText}`;
+  }
+}
+
 // Generate problems using Gemini AI
 export const generateProblems = onRequest({
   invoker: "public",
@@ -265,18 +370,22 @@ export const generateProblems = onRequest({
           id: `problem_${Date.now()}_${index}`,
         }));
 
-        // Create worksheet title and description
-        let title: string;
-        let description: string;
+        // Generate worksheet title using LLM
+        const title = await generateWorksheetTitle({
+          topic,
+          difficulty,
+          numQuestions,
+          pdfIncluded: !!fileId,
+          generatedProblems: problems
+        });
 
+        // Create worksheet description
+        let description: string;
         if (fileId && topic) {
-          title = `PDF資料 + ${topic} - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`;
           description = `PDFファイルの内容と「${topic}」に関する${numQuestions}問の練習問題`;
         } else if (fileId) {
-          title = `PDF資料 - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`;
           description = `PDFファイルの内容に基づく${numQuestions}問の練習問題`;
         } else {
-          title = `${topic} - ${difficulty === "easy" ? "簡単" : difficulty === "medium" ? "普通" : "難しい"}`;
           description = `${topic}に関する${numQuestions}問の練習問題`;
         }
 
